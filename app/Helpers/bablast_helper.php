@@ -42,11 +42,46 @@ if (!function_exists('send_cloudchat_otp')) {
 
         // Format phone number to start with 62 instead of 0, 8, or +62
         $phone = format_phone_international($phone);
-
-        $url = 'https://app.cloudchat.id/api/public/v1/messages';
         $message = "*$otp* adalah kode verifikasi OTP Anda. Demi keamanan, jangan berikan kode ini kepada siapapun.";
 
-        $data = [
+        // 1. Coba Endpoint WhatsApp Official (Meta) Cloudchat
+        $metaUrl = 'https://app.cloudchat.id/api/public/v1/meta/messages';
+        $metaData = [
+            'to'   => $phone,
+            'type' => 'text',
+            'text' => $message,
+        ];
+
+        $ch = curl_init($metaUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($metaData));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+        ]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode == 200 || $httpCode == 201) {
+            $responseData = json_decode($response, true);
+            if (!isset($responseData['error']) && (!isset($responseData['success']) || $responseData['success'] !== false)) {
+                return true;
+            }
+            log_message('error', 'Cloudchat Meta Error: ' . $response . ' -> Mencoba endpoint channel standar...');
+        } else {
+            log_message('error', 'Cloudchat Meta HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response . ' -> Mencoba endpoint channel standar...');
+        }
+
+        // 2. Fallback: Coba Endpoint Channel Standar Cloudchat (/messages)
+        $stdUrl = 'https://app.cloudchat.id/api/public/v1/messages';
+        $stdData = [
             'channel' => 'whatsapp',
             'type'    => 'text',
             'to'      => $phone,
@@ -55,10 +90,10 @@ if (!function_exists('send_cloudchat_otp')) {
             ],
         ];
 
-        $ch = curl_init($url);
+        $ch = curl_init($stdUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($stdData));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
             'Authorization: Bearer ' . $apiKey,
@@ -75,12 +110,12 @@ if (!function_exists('send_cloudchat_otp')) {
         if ($httpCode == 200 || $httpCode == 201) {
             $responseData = json_decode($response, true);
             if (isset($responseData['success']) && $responseData['success'] === false) {
-                log_message('error', 'Cloudchat API Soft Error: ' . $response);
+                log_message('error', 'Cloudchat Standard Soft Error: ' . $response);
                 return false;
             }
             return true;
         } else {
-            log_message('error', 'Cloudchat API Error HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response);
+            log_message('error', 'Cloudchat Standard HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response);
             return false;
         }
     }
