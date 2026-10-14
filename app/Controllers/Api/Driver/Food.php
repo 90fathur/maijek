@@ -260,14 +260,17 @@ class Food extends ResourceController
         $db = \Config\Database::connect();
         $db->transStart();
 
-        // Anti-Race Condition: Kunci pesanan makanan hanya jika statusnya masih 'ready' dan belum memiliki supir di Database detik ini
+        // Anti-Race Condition & Idempotency: Kunci pesanan makanan jika belum ada driver atau jika sudah diambil oleh driver ini sendiri
         $db->table('food_orders')
             ->where('id', $orderId)
-            ->where('status', 'ready')
             ->groupStart()
-            ->where('driver_id', null)
-            ->orWhere('driver_id', 0)
-            ->orWhere('driver_id', '')
+                ->whereIn('status', ['ready', 'processing', 'accepted_by_merchant', 'accepted', 'driver_assigned'])
+            ->groupEnd()
+            ->groupStart()
+                ->where('driver_id', null)
+                ->orWhere('driver_id', 0)
+                ->orWhere('driver_id', '')
+                ->orWhere('driver_id', $payload['uid'])
             ->groupEnd()
             ->update([
                 'driver_id' => $payload['uid'],
@@ -276,8 +279,11 @@ class Food extends ResourceController
 
         // Cek apakah update berhasil (artinya pesanan belum diambil orang lain)
         if ($db->affectedRows() == 0) {
-            $db->transRollback();
-            return $this->respond(['status' => 400, 'message' => 'Maaf, pesanan ini baru saja diambil oleh supir lain'], 400);
+            $checkSelf = $db->table('food_orders')->where('id', $orderId)->where('driver_id', $payload['uid'])->countAllResults();
+            if ($checkSelf == 0) {
+                $db->transRollback();
+                return $this->respond(['status' => 400, 'message' => 'Maaf, pesanan ini baru saja diambil oleh supir lain'], 400);
+            }
         }
 
         $db->transComplete();
@@ -319,18 +325,34 @@ class Food extends ResourceController
 
         // Ambil data pesanan makanan terbaru secara lengkap untuk langsung dipakai frontend Driver
         $orderModel = new FoodOrderModel();
-        $updatedFoodOrder = $orderModel->select('food_orders.*, merchants.name as merchant_name, merchants.address as merchant_address, merchants.latitude as merchant_lat, merchants.longitude as merchant_lng, users.name as user_name, users.phone as user_phone, users.photo as user_photo')
+        $updatedFoodOrder = $orderModel->select('food_orders.*, merchants.name as merchant_name, merchants.address as merchant_address, merchants.phone as merchant_phone, merchants.latitude as merchant_lat, merchants.longitude as merchant_lng, users.name as user_name, users.phone as user_phone, users.photo as user_photo')
             ->join('merchants', 'merchants.id = food_orders.merchant_id')
             ->join('users', 'users.id = food_orders.user_id')
             ->where('food_orders.id', $orderId)
             ->first();
 
-        if ($updatedFoodOrder && !empty($updatedFoodOrder['user_photo']) && strpos($updatedFoodOrder['user_photo'], 'http') !== 0) {
-            $updatedFoodOrder['user_photo'] = base_url('uploads/profiles/' . $updatedFoodOrder['user_photo']);
-        }
-
         if ($updatedFoodOrder) {
+            $settingModel = new \App\Models\SettingModel();
+            $feeSetting = $settingModel->where('setting_key', 'food_platform_fee')->first();
+            $feeTypeSetting = $settingModel->where('setting_key', 'food_platform_fee_type')->first();
+            $pFee = $feeSetting ? (float)$feeSetting['setting_value'] : 8;
+            $pFeeType = $feeTypeSetting ? $feeTypeSetting['setting_value'] : 'percent';
+
+            $this->enrichFoodFinancials($updatedFoodOrder, $pFee, $pFeeType);
+
+            $updatedFoodOrder['items'] = $db->table('food_order_items')
+                ->select('food_order_items.*, merchant_menus.name as menu_name, merchant_menus.photo as menu_photo')
+                ->join('merchant_menus', 'merchant_menus.id = food_order_items.menu_id', 'left')
+                ->where('food_order_id', $orderId)
+                ->get()
+                ->getResultArray();
+
+            if (!empty($updatedFoodOrder['user_photo']) && strpos($updatedFoodOrder['user_photo'], 'http') !== 0) {
+                $updatedFoodOrder['user_photo'] = base_url('uploads/profiles/' . $updatedFoodOrder['user_photo']);
+            }
+
             $updatedFoodOrder['order_type'] = ($updatedFoodOrder['order_type'] ?? '') === 'mart' ? 'mart' : 'food';
+            $updatedFoodOrder['status'] = 'driver_assigned';
         }
 
         $orderType = ($order['order_type'] ?? '') === 'mart' ? 'mart' : 'food';
@@ -356,6 +378,11 @@ class Food extends ResourceController
             return $this->respond(['status' => 403, 'message' => 'Akses ditolak'], 403);
         }
 
+        // Anti-Tampering: Jika pesanan sudah dibatalkan sebelumnya, jangan ubah status
+        if ($order['status'] === 'cancelled' && $newStatus !== 'cancelled') {
+            return $this->respond(['status' => 400, 'message' => 'Pesanan ini sudah dibatalkan sebelumnya.'], 400);
+        }
+
         $isMart = (isset($order['order_type']) && $order['order_type'] === 'mart');
         if (!$isMart && !empty($order['merchant_id'])) {
             $mCheck = $db->table('merchants')->select('merchant_type')->where('id', $order['merchant_id'])->get()->getRow();
@@ -367,7 +394,7 @@ class Food extends ResourceController
         if ($newStatus == 'completed') {
             // Jika pesanan sudah completed sebelumnya, langsung kembalikan respon sukses tanpa duplikasi mutasi saldo
             if ($order['status'] === 'completed') {
-                return $this->respond(['status' => 200, 'message' => 'Status pesanan berhasil diubah dan pembayaran diselesaikan']);
+                return $this->respond(['status' => 200, 'message' => 'Status pesanan berhasil diubah dan pembayaran diselesaikan', 'data' => ['id' => (int)$orderId, 'status' => 'completed']]);
             }
 
             $db->transStart();
@@ -508,7 +535,22 @@ class Food extends ResourceController
                 ['type' => $isMart ? 'mart_status_update' : 'food_status_update', 'order_id' => $orderId, 'status' => 'completed']
             );
 
-            return $this->respond(['status' => 200, 'message' => 'Status pesanan berhasil diubah dan pembayaran diselesaikan']);
+            // Beritahu Merchant bahwa pesanan selesai diantar
+            $merchant = $db->table('merchants')->where('id', $order['merchant_id'])->get()->getRow();
+            if ($merchant && !empty($merchant->fcm_token)) {
+                $fcmService->sendPushNotification(
+                    $merchant->fcm_token,
+                    $isMart ? "Pesanan Belanja Selesai! ✅" : "Pesanan Makanan Selesai! ✅",
+                    "Pesanan #$orderId telah berhasil diantarkan oleh driver ke pembeli.",
+                    ['type' => $isMart ? 'mart_status_update' : 'food_status_update', 'order_id' => (string)$orderId, 'status' => 'completed']
+                );
+            }
+
+            return $this->respond([
+                'status' => 200, 
+                'message' => 'Status pesanan berhasil diubah dan pembayaran diselesaikan',
+                'data' => ['id' => (int)$orderId, 'status' => 'completed']
+            ]);
         } else if ($newStatus == 'cancelled') {
             $reason = $this->request->getVar('reason') ?? 'Dibatalkan oleh kurir';
 
@@ -584,10 +626,20 @@ class Food extends ResourceController
                 "Pesanan #$orderId dibatalkan oleh kurir. Alasan: $reason.$refundMsg",
                 ['type' => $isMart ? 'mart_order_cancelled' : 'food_order_cancelled', 'order_id' => (string)$orderId, 'status' => 'cancelled']
             );
-            return $this->respond(['status' => 200, 'message' => 'Pesanan berhasil dibatalkan']);
+            return $this->respond([
+                'status' => 200, 
+                'message' => 'Pesanan berhasil dibatalkan',
+                'data' => ['id' => (int)$orderId, 'status' => 'cancelled']
+            ]);
         }
 
+        // Pastikan ENUM status di DB mendukung nilai ini secara aman
+        try {
+            $db->query("ALTER TABLE food_orders MODIFY COLUMN status ENUM('pending', 'accepted_by_merchant', 'processing', 'ready', 'driver_assigned', 'accepted', 'driver_at_merchant', 'delivering', 'in_progress', 'delivered', 'completed', 'cancelled') DEFAULT 'pending'");
+        } catch (\Throwable $e) {}
+
         $orderModel->update($orderId, ['status' => $newStatus]);
+        $driverName = $payload['name'] ?? 'Driver';
 
         // Kirim Notifikasi FCM ke User (Push + Kotak Masuk)
         $fcmService = new FcmService();
@@ -596,13 +648,13 @@ class Food extends ResourceController
         if ($newStatus == 'driver_at_merchant') {
             $title = $isMart ? "Driver Tiba di Toko 📍" : "Driver Tiba di Restoran 📍";
             $body = $isMart
-                ? "Driver telah sampai di toko dan sedang menunggu belanjaan Anda diserahkan."
-                : "Driver telah sampai di restoran dan sedang menunggu pesanan Anda disiapkan.";
+                ? "Driver $driverName telah sampai di toko dan sedang menunggu belanjaan Anda diserahkan."
+                : "Driver $driverName telah sampai di restoran dan sedang menunggu pesanan Anda disiapkan.";
         } else if ($newStatus == 'delivering') {
             $title = $isMart ? "Belanjaan Sedang Diantar! 🚀" : "Makanan Sedang Diantar! 🚀";
             $body = $isMart
-                ? "Driver telah mengambil barang belanjaan Anda dan sedang dalam perjalanan mengantarkannya ke lokasi."
-                : "Driver telah mengambil makanan Anda dan sedang dalam perjalanan mengantarkannya ke lokasi.";
+                ? "Driver $driverName telah mengambil barang belanjaan Anda dan sedang dalam perjalanan mengantarkannya ke lokasi."
+                : "Driver $driverName telah mengambil makanan Anda dan sedang dalam perjalanan mengantarkannya ke lokasi.";
         }
 
         $fcmService->sendToUserWithInbox(
@@ -612,7 +664,28 @@ class Food extends ResourceController
             ['type' => $isMart ? 'mart_status_update' : 'food_status_update', 'order_id' => $orderId, 'status' => $newStatus]
         );
 
-        return $this->respond(['status' => 200, 'message' => 'Status pesanan berhasil diubah']);
+        // Kirim Notifikasi FCM ke Merchant agar kasir/resto langsung tahu kedatangan/keberangkatan driver!
+        $merchant = $db->table('merchants')->where('id', $order['merchant_id'])->get()->getRow();
+        if ($merchant && !empty($merchant->fcm_token)) {
+            $mTitle = ($newStatus == 'driver_at_merchant')
+                ? ($isMart ? "Kurir Tiba di Toko 📍" : "Kurir Tiba di Restoran 📍")
+                : ($isMart ? "Belanjaan Sedang Diantar 🚀" : "Makanan Sedang Diantar 🚀");
+            $mBody = ($newStatus == 'driver_at_merchant')
+                ? "Kurir $driverName sudah sampai di lokasi Anda untuk mengambil pesanan #$orderId."
+                : "Pesanan #$orderId telah diambil oleh kurir $driverName dan sedang diantar ke pembeli.";
+
+            $fcmService->sendPushNotification($merchant->fcm_token, $mTitle, $mBody, [
+                'type' => $isMart ? 'mart_status_update' : 'food_status_update',
+                'order_id' => (string)$orderId,
+                'status' => $newStatus
+            ]);
+        }
+
+        return $this->respond([
+            'status' => 200, 
+            'message' => 'Status pesanan berhasil diubah',
+            'data' => ['id' => (int)$orderId, 'status' => $newStatus]
+        ]);
     }
 
     private function checkDailyReward($driverId)
