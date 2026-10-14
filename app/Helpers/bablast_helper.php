@@ -44,42 +44,7 @@ if (!function_exists('send_cloudchat_otp')) {
         $phone = format_phone_international($phone);
         $message = "*$otp* adalah kode verifikasi OTP Anda. Demi keamanan, jangan berikan kode ini kepada siapapun.";
 
-        // 1. Coba Endpoint WhatsApp Official (Meta) Cloudchat
-        $metaUrl = 'https://app.cloudchat.id/api/public/v1/meta/messages';
-        $metaData = [
-            'to'   => $phone,
-            'type' => 'text',
-            'text' => $message,
-        ];
-
-        $ch = curl_init($metaUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($metaData));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $apiKey,
-        ]);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr  = curl_error($ch);
-        curl_close($ch);
-
-        if ($httpCode == 200 || $httpCode == 201) {
-            $responseData = json_decode($response, true);
-            if (!isset($responseData['error']) && (!isset($responseData['success']) || $responseData['success'] !== false)) {
-                return true;
-            }
-            log_message('error', 'Cloudchat Meta Error: ' . $response . ' -> Mencoba endpoint channel standar...');
-        } else {
-            log_message('error', 'Cloudchat Meta HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response . ' -> Mencoba endpoint channel standar...');
-        }
-
-        // 2. Fallback: Coba Endpoint Channel Standar Cloudchat (/messages)
+        // 1. Endpoint Utama: WA Unofficial (Scan QR) Cloudchat
         $stdUrl = 'https://app.cloudchat.id/api/public/v1/messages';
         $stdData = [
             'channel' => 'whatsapp',
@@ -109,15 +74,46 @@ if (!function_exists('send_cloudchat_otp')) {
 
         if ($httpCode == 200 || $httpCode == 201) {
             $responseData = json_decode($response, true);
-            if (isset($responseData['success']) && $responseData['success'] === false) {
-                log_message('error', 'Cloudchat Standard Soft Error: ' . $response);
-                return false;
+            if (isset($responseData['success']) && $responseData['success'] !== false) {
+                return true;
             }
-            return true;
+            log_message('error', 'Cloudchat Standard Soft Error: ' . $response . ' -> Mencoba endpoint Meta...');
         } else {
-            log_message('error', 'Cloudchat Standard HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response);
-            return false;
+            log_message('error', 'Cloudchat Standard HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response . ' -> Mencoba endpoint Meta...');
         }
+
+        // 2. Fallback: Endpoint WhatsApp Official (Meta API) Cloudchat
+        $metaUrl = 'https://app.cloudchat.id/api/public/v1/meta/messages';
+        $metaData = [
+            'to'   => $phone,
+            'type' => 'text',
+            'text' => $message,
+        ];
+
+        $ch = curl_init($metaUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($metaData));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+        ]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode == 200 || $httpCode == 201) {
+            $responseData = json_decode($response, true);
+            if (!isset($responseData['error']) && (!isset($responseData['success']) || $responseData['success'] !== false)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
