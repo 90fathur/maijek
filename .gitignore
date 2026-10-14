@@ -1,0 +1,180 @@
+#-------------------------
+# Operating Specific Junk Files
+#-------------------------
+
+# OS X
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# OS X Thumbnails
+._*
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# Linux
+*~
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+#-------------------------
+# Environment Files
+#-------------------------
+# These should never be under version control,
+# as it poses a security risk.
+.env
+.vagrant
+Vagrantfile
+
+#-------------------------
+# Temporary Files
+#-------------------------
+/writable/cache/*
+!/writable/cache/index.html
+
+/writable/logs/*
+!/writable/logs/index.html
+
+/writable/session/*
+!/writable/session/index.html
+
+/writable/uploads/*
+!/writable/uploads/index.html
+
+/writable/debugbar/*
+!/writable/debugbar/index.html
+
+php_errors.log
+
+#-------------------------
+# User Guide Temp Files
+#-------------------------
+/user_guide_src/build/*
+/user_guide_src/cilexer/build/*
+/user_guide_src/cilexer/dist/*
+/user_guide_src/cilexer/pycilexer.egg-info/*
+
+#-------------------------
+# Test Files
+#-------------------------
+/tests/coverage*
+
+# Don't save phpunit under version control.
+/phpunit
+
+#-------------------------
+# Composer
+#-------------------------
+vendor/
+
+#-------------------------
+# IDE / Development Files
+#-------------------------
+
+# Modules Testing
+_modules/*
+
+# phpenv local config
+.php-version
+
+# Jetbrains editors (PHPStorm, etc)
+.idea/
+*.iml
+
+# NetBeans
+/nbproject/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+/nbactions.xml
+/nb-configuration.xml
+/.nb-gradle/
+
+# Sublime Text
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+*.sublime-workspace
+*.sublime-project
+.phpintel
+/api/
+
+# Visual Studio Code
+.vscode/
+
+/results/
+/phpunit.xml
+
+#-------------------------
+# Maijek Custom Ignores
+#-------------------------
+# Sensitive configs & credentials
+.env
+*.jks
+*.keystore
+*firebase-adminsdk*.json
+*google-services*.json
+GoogleService-Info.plist
+
+# Mobile apps (tracked in separate repos)
+maijek_app/
+maijek_driver/
+maifood_partner/
+playstore_bundles/
+aab_release/
+
+# Large binaries, archives & SQL dumps
+*.apk
+*.aab
+*.zip
+*.tar
+*.gz
+*.sql
+*.log
+
+# Debug, scratch and temporary test scripts in root
+*.txt
+scratch_*.php
+test_*.php
+check_*.php
+check.php
+test.php
+alt_migrate*.php
+temp_migrate.php
+online_migrate.php
+db_alter*.php
+describe_db.php
+fix_drivers.php
+get_bbox.php
+get_schema.php
+raw_db.php
+clear_cache.php
+update_coords.php
+test_payload.json
+
+# Uploaded media & scratch files
+public/uploads/*
+!public/uploads/index.html
+scratch/
+maintenance_scripts/
+
