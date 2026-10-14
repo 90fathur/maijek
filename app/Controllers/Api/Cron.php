@@ -65,6 +65,8 @@ class Cron extends ResourceController
 
             if ($order->payment_method == 'maipay') {
                 $db->table('users')->where('id', $order->user_id)->set('balance', 'balance + ' . $order->total_price, false)->update();
+            } else if ($order->payment_method == 'split_delivery_maipay') {
+                $db->table('users')->where('id', $order->user_id)->set('balance', 'balance + ' . $order->delivery_fee, false)->update();
             }
 
             $user = $db->table('users')->where('id', $order->user_id)->get()->getRow();

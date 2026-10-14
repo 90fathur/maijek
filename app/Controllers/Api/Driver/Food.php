@@ -409,6 +409,37 @@ class Food extends ResourceController
 
                 // Tambah saldo merchant (food_total utuh)
                 $db->table('merchants')->where('id', $order['merchant_id'])->set('balance', 'balance + ' . $order['food_total'], false)->update();
+            } else if ($order['payment_method'] == 'split_delivery_maipay') {
+                // SPLIT PAYMENT:
+                // Ongkir dibayar via MaiPay digital (sudah dipotong di awal dari user).
+                // Makanan dibayar tunai oleh driver ke merchant, dan ditagih tunai oleh driver ke pelanggan.
+                // Merchant TIDAK ditambah saldo digitalnya (karena sudah terima fisik tunai dari driver).
+                // Driver mendapatkan: Ongkir Bersih ($deliveryFee - $komisi) + Subsidi Diskon Promo (jika ada).
+                $driverEarn = (float)$order['delivery_fee'] - $komisi;
+                $discountSubsidi = (float)($order['discount_amount'] ?? 0);
+                $totalCredit = $driverEarn + $discountSubsidi;
+
+                if ($totalCredit > 0) {
+                    $db->table('drivers')->where('id', $payload['uid'])->set('balance', 'balance + ' . $totalCredit, false)->update();
+
+                    if ($db->tableExists('transactions')) {
+                        $desc = "Pendapatan Ongkir Split Food #{$orderId} (Bersih Rp " . number_format($driverEarn, 0, ',', '.');
+                        if ($discountSubsidi > 0) {
+                            $desc .= " + Subsidi Diskon Rp " . number_format($discountSubsidi, 0, ',', '.');
+                        }
+                        $desc .= ")";
+
+                        $db->table('transactions')->insert([
+                            'driver_id'   => $payload['uid'],
+                            'user_id'     => $order['user_id'],
+                            'type'        => 'credit',
+                            'amount'      => (int)round($totalCredit),
+                            'description' => $desc,
+                            'created_at'  => date('Y-m-d H:i:s'),
+                            'updated_at'  => date('Y-m-d H:i:s'),
+                        ]);
+                    }
+                }
             } else {
                 // Tunai: Penumpang membayar tunai sebesar total_price (yang sudah terpotong discount_amount).
                 // Driver menalangi kasir merchant sebesar food_total utuh, sehingga fisik uang tunai di tangan driver berkurang sebesar discount_amount.
@@ -495,6 +526,33 @@ class Food extends ResourceController
                     ->where('id', $order['user_id'])
                     ->set('balance', 'balance + ' . (float)$order['total_price'], false)
                     ->update();
+
+                if ($db->tableExists('transactions')) {
+                    $db->table('transactions')->insert([
+                        'user_id'     => $order['user_id'],
+                        'type'        => 'credit',
+                        'amount'      => (int)round($order['total_price']),
+                        'description' => "Refund Pembatalan Pesanan Food #{$orderId} oleh Kurir",
+                        'created_at'  => date('Y-m-d H:i:s'),
+                        'updated_at'  => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            } else if ($order['payment_method'] === 'split_delivery_maipay' && (float)$order['delivery_fee'] > 0) {
+                $db->table('users')
+                    ->where('id', $order['user_id'])
+                    ->set('balance', 'balance + ' . (float)$order['delivery_fee'], false)
+                    ->update();
+
+                if ($db->tableExists('transactions')) {
+                    $db->table('transactions')->insert([
+                        'user_id'     => $order['user_id'],
+                        'type'        => 'credit',
+                        'amount'      => (int)round($order['delivery_fee']),
+                        'description' => "Refund Ongkir Split Food #{$orderId} oleh Kurir",
+                        'created_at'  => date('Y-m-d H:i:s'),
+                        'updated_at'  => date('Y-m-d H:i:s'),
+                    ]);
+                }
             }
 
             $db->transComplete();
@@ -678,8 +736,23 @@ class Food extends ResourceController
         $order['platform_fee_percent'] = $platformFee;
         $order['platform_fee_amount'] = $komisi;
         $order['driver_net_earnings'] = $driverNet;
-        $order['wallet_adjustment'] = $netAdjustment;
-        $order['cash_to_collect'] = ($order['payment_method'] === 'cash') ? $totalPrice : 0;
-        $order['merchant_bailout'] = ($order['payment_method'] === 'cash') ? $foodTotal : 0;
+
+        if ($order['payment_method'] === 'split_delivery_maipay') {
+            $cashFood = max(0, $foodTotal - $discountSubsidi);
+            $order['is_split_payment'] = true;
+            $order['split_payment_type'] = 'ongkir_maipay';
+            $order['payment_label'] = 'SPLIT (ONGKIR MAIPAY)';
+            $order['cash_to_collect'] = $cashFood;
+            $order['merchant_bailout'] = $foodTotal;
+            $order['wallet_adjustment'] = $driverNet + $discountSubsidi;
+            $order['split_instruction'] = 'Hanya tagih uang makanan Rp ' . number_format($cashFood, 0, ',', '.') . ' ke pelanggan. Ongkir Rp ' . number_format($deliveryFee, 0, ',', '.') . ' sudah dibayar digital dan otomatis masuk saldo Anda.';
+        } else {
+            $order['is_split_payment'] = false;
+            $order['payment_label'] = ($order['payment_method'] === 'maipay') ? 'MAIPAY' : 'TUNAI';
+            $order['split_instruction'] = '';
+            $order['cash_to_collect'] = ($order['payment_method'] === 'cash') ? $totalPrice : 0;
+            $order['merchant_bailout'] = ($order['payment_method'] === 'cash') ? $foodTotal : 0;
+            $order['wallet_adjustment'] = $netAdjustment;
+        }
     }
 }

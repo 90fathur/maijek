@@ -514,12 +514,17 @@ class Food extends ResourceController
         $totalPrice = max(0, ($foodTotal + $deliveryFee) - $discountAmount);
         $paymentMethod = $this->request->getVar('payment_method') ?? 'cash';
 
-        // Validasi Saldo Mai-Pay
+        // Validasi Saldo Mai-Pay (Penuh atau Split Ongkir)
+        $db = \Config\Database::connect();
         if ($paymentMethod == 'maipay') {
-            $db = \Config\Database::connect();
             $user = $db->table('users')->where('id', $payload['uid'])->get()->getRow();
             if (!$user || $user->balance < $totalPrice) {
-                return $this->respond(['status' => 400, 'message' => 'Saldo Mai-Pay tidak mencukupi. Sisa saldo Anda: Rp ' . ($user ? $user->balance : 0)], 400);
+                return $this->respond(['status' => 400, 'message' => 'Saldo Mai-Pay tidak mencukupi. Sisa saldo Anda: Rp ' . number_format($user ? $user->balance : 0, 0, ',', '.')], 400);
+            }
+        } else if ($paymentMethod == 'split_delivery_maipay') {
+            $user = $db->table('users')->where('id', $payload['uid'])->get()->getRow();
+            if (!$user || $user->balance < $deliveryFee) {
+                return $this->respond(['status' => 400, 'message' => 'Saldo Mai-Pay tidak mencukupi untuk bayar ongkir (Rp ' . number_format($deliveryFee, 0, ',', '.') . '). Sisa saldo Anda: Rp ' . number_format($user ? $user->balance : 0, 0, ',', '.')], 400);
             }
         }
 
@@ -568,8 +573,31 @@ class Food extends ResourceController
 
         // POTONG SALDO DI AWAL (Sistem Escrow)
         if ($paymentMethod == 'maipay') {
-            $db = \Config\Database::connect();
             $db->table('users')->where('id', $payload['uid'])->set('balance', 'balance - ' . $totalPrice, false)->update();
+
+            if ($db->tableExists('transactions')) {
+                $db->table('transactions')->insert([
+                    'user_id'     => $payload['uid'],
+                    'type'        => 'debit',
+                    'amount'      => (int)round($totalPrice),
+                    'description' => "Pembayaran Pesanan MaiFood #{$orderId}",
+                    'created_at'  => date('Y-m-d H:i:s'),
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
+            }
+        } else if ($paymentMethod == 'split_delivery_maipay') {
+            $db->table('users')->where('id', $payload['uid'])->set('balance', 'balance - ' . $deliveryFee, false)->update();
+
+            if ($db->tableExists('transactions')) {
+                $db->table('transactions')->insert([
+                    'user_id'     => $payload['uid'],
+                    'type'        => 'debit',
+                    'amount'      => (int)round($deliveryFee),
+                    'description' => "Pembayaran Ongkir Split MaiFood #{$orderId}",
+                    'created_at'  => date('Y-m-d H:i:s'),
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
+            }
         }
 
         // Masukkan items
@@ -694,6 +722,8 @@ class Food extends ResourceController
             $order['estimated_time'] = $order['estimated_range'] . ' (Tiba ~' . $order['estimated_arrival_clock'] . ')';
         }
 
+        $this->enrichUserFoodPayment($order);
+
         return $this->respond([
             'status' => 200,
             'message' => 'Pesanan aktif ditemukan',
@@ -774,6 +804,8 @@ class Food extends ResourceController
             $order['estimated_time'] = $order['estimated_range'] . ' (Tiba ~' . $order['estimated_arrival_clock'] . ')';
         }
 
+        $this->enrichUserFoodPayment($order);
+
         return $this->respond([
             'status' => 200,
             'message' => 'Detail pesanan ditemukan',
@@ -793,6 +825,10 @@ class Food extends ResourceController
             ->where('user_id', $payload['uid'])
             ->orderBy('created_at', 'DESC')
             ->findAll();
+
+        foreach ($orders as &$ord) {
+            $this->enrichUserFoodPayment($ord);
+        }
 
         return $this->respond(['status' => 200, 'message' => 'Riwayat pesanan makanan', 'data' => $orders]);
     }
@@ -891,6 +927,33 @@ class Food extends ResourceController
                 ->where('id', $payload['uid'])
                 ->set('balance', 'balance + ' . (float)$order['total_price'], false)
                 ->update();
+
+            if ($db->tableExists('transactions')) {
+                $db->table('transactions')->insert([
+                    'user_id'     => $payload['uid'],
+                    'type'        => 'credit',
+                    'amount'      => (int)round($order['total_price']),
+                    'description' => "Refund Pembatalan Pesanan MaiFood #{$orderId}",
+                    'created_at'  => date('Y-m-d H:i:s'),
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
+            }
+        } else if ($order['payment_method'] === 'split_delivery_maipay' && (float)$order['delivery_fee'] > 0) {
+            $db->table('users')
+                ->where('id', $payload['uid'])
+                ->set('balance', 'balance + ' . (float)$order['delivery_fee'], false)
+                ->update();
+
+            if ($db->tableExists('transactions')) {
+                $db->table('transactions')->insert([
+                    'user_id'     => $payload['uid'],
+                    'type'        => 'credit',
+                    'amount'      => (int)round($order['delivery_fee']),
+                    'description' => "Refund Ongkir Split MaiFood #{$orderId}",
+                    'created_at'  => date('Y-m-d H:i:s'),
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
+            }
         }
 
         $db->transComplete();
@@ -926,9 +989,49 @@ class Food extends ResourceController
             }
         }
 
+        $refundText = '.';
+        if ($order['payment_method'] === 'maipay') {
+            $refundText = ' dan saldo Mai-Pay telah dikembalikan 100%.';
+        } else if ($order['payment_method'] === 'split_delivery_maipay') {
+            $refundText = ' dan saldo ongkir Mai-Pay telah dikembalikan.';
+        }
+
         return $this->respond([
             'status' => 200,
-            'message' => 'Pesanan berhasil dibatalkan' . ($order['payment_method'] === 'maipay' ? ' dan saldo Mai-Pay telah dikembalikan 100%.' : '.')
+            'message' => 'Pesanan berhasil dibatalkan' . $refundText
         ], 200);
     }
+
+    /**
+     * Memperkaya order dengan rincian pembayaran split/maipay/cash untuk user
+     */
+    private function enrichUserFoodPayment(array &$order)
+    {
+        $foodTotal = (float)($order['food_total'] ?? 0);
+        $deliveryFee = (float)($order['delivery_fee'] ?? 0);
+        $discountAmount = (float)($order['discount_amount'] ?? 0);
+        $totalPrice = (float)($order['total_price'] ?? max(0, $foodTotal + $deliveryFee - $discountAmount));
+
+        if (($order['payment_method'] ?? 'cash') === 'split_delivery_maipay') {
+            $cashToDriver = max(0, $foodTotal - $discountAmount);
+            $order['is_split_payment'] = true;
+            $order['payment_label'] = 'Split (Ongkir MaiPay + Makanan Tunai)';
+            $order['pay_digital'] = $deliveryFee;
+            $order['pay_cash_to_driver'] = $cashToDriver;
+            $order['payment_instruction'] = 'Ongkir Rp ' . number_format($deliveryFee, 0, ',', '.') . ' sudah lunas via MaiPay. Siapkan uang tunai pas Rp ' . number_format($cashToDriver, 0, ',', '.') . ' untuk driver saat pesanan tiba.';
+        } else if (($order['payment_method'] ?? 'cash') === 'maipay') {
+            $order['is_split_payment'] = false;
+            $order['payment_label'] = 'MaiPay (Saldo Penuh)';
+            $order['pay_digital'] = $totalPrice;
+            $order['pay_cash_to_driver'] = 0.0;
+            $order['payment_instruction'] = 'Seluruh pesanan sudah lunas via MaiPay. Anda tidak perlu membayar apapun ke driver.';
+        } else {
+            $order['is_split_payment'] = false;
+            $order['payment_label'] = 'Tunai (Cash)';
+            $order['pay_digital'] = 0.0;
+            $order['pay_cash_to_driver'] = $totalPrice;
+            $order['payment_instruction'] = 'Siapkan uang tunai Rp ' . number_format($totalPrice, 0, ',', '.') . ' untuk dibayarkan ke driver saat pesanan tiba.';
+        }
+    }
 }
+

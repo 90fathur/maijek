@@ -227,9 +227,11 @@ class Orders extends BaseController
             if ($order && in_array($order->status, ['pending', 'processing', 'ready', 'accepted_by_driver', 'in_progress'])) {
                 $db->table('food_orders')->where('id', $id)->update(['status' => 'cancelled']);
 
-                // Refund Mai-Pay
+                // Refund Mai-Pay (Penuh atau Split Ongkir)
                 if ($order->payment_method == 'maipay') {
                     $db->table('users')->where('id', $order->user_id)->set('balance', 'balance + ' . $order->total_price, false)->update();
+                } else if ($order->payment_method == 'split_delivery_maipay') {
+                    $db->table('users')->where('id', $order->user_id)->set('balance', 'balance + ' . $order->delivery_fee, false)->update();
                 }
 
                 session()->setFlashdata('success', 'Pesanan MaiFood berhasil dibatalkan paksa oleh Admin (Refund sukses)');
@@ -309,7 +311,8 @@ class Orders extends BaseController
                     'service_label'    => ($order['order_type'] ?? 'food') === 'mart' ? 'MaiMart' : 'MaiFood',
                     'status'           => $order['status'],
                     'created_at'       => date('d M Y, H:i', strtotime($order['created_at'])) . ' WITA',
-                    'payment_method'   => strtoupper($order['payment_method'] ?? 'CASH'),
+                    'payment_method'   => ($order['payment_method'] === 'split_delivery_maipay') ? 'SPLIT (ONGKIR MAIPAY)' : strtoupper($order['payment_method'] ?? 'CASH'),
+                    'is_split_payment' => ($order['payment_method'] === 'split_delivery_maipay'),
                     'customer_name'    => !empty($order['user_name']) ? $order['user_name'] : 'Pelanggan #' . $order['user_id'],
                     'customer_phone'   => $order['user_phone'] ?? '-',
                     'merchant_name'    => $order['merchant_name'] ?? 'Mitra Resto/Toko',
