@@ -67,3 +67,8 @@
 #--------------------------------------------------------------------
 
 # logger.threshold = 4
+# CLOUDCHAT_API_KEY=""
+# BABLAST_API_KEY=""
+# WHAPIFY_API_SECRET=""
+# WHAPIFY_ACCOUNT_ID=""
+# FONNTE_API_KEY=""

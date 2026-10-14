@@ -72,7 +72,8 @@ class Settings extends BaseController
             'promo_dynamic_type' => $settingModel->where('setting_key', 'promo_dynamic_type')->first(),
             'promo_dynamic_amount' => $settingModel->where('setting_key', 'promo_dynamic_amount')->first(),
 
-            // API Keys (OTP Fallback)
+            // API Keys (OTP Fallback: Cloudchat -> Bablast -> Whapify -> Fonnte)
+            'cloudchat_api_key' => $settingModel->where('setting_key', 'cloudchat_api_key')->first(),
             'bablast_api_key' => $settingModel->where('setting_key', 'bablast_api_key')->first(),
             'whapify_api_secret' => $settingModel->where('setting_key', 'whapify_api_secret')->first(),
             'whapify_account_id' => $settingModel->where('setting_key', 'whapify_account_id')->first(),
@@ -149,6 +150,7 @@ class Settings extends BaseController
         $this->saveOrUpdateSetting($settingModel, 'promo_dynamic_amount', $this->request->getPost('promo_dynamic_amount'));
 
         // API Keys Update
+        $this->saveOrUpdateSetting($settingModel, 'cloudchat_api_key', $this->request->getPost('cloudchat_api_key'));
         $this->saveOrUpdateSetting($settingModel, 'bablast_api_key', $this->request->getPost('bablast_api_key'));
         $this->saveOrUpdateSetting($settingModel, 'whapify_api_secret', $this->request->getPost('whapify_api_secret'));
         $this->saveOrUpdateSetting($settingModel, 'whapify_account_id', $this->request->getPost('whapify_account_id'));

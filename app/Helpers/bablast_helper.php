@@ -31,8 +31,63 @@ if (!function_exists('format_phone_international')) {
     }
 }
 
-if (!function_exists('send_whatsapp_otp')) {
-    function send_whatsapp_otp($phone, $otp)
+if (!function_exists('send_cloudchat_otp')) {
+    function send_cloudchat_otp($phone, $otp)
+    {
+        $apiKey = get_otp_key('cloudchat_api_key');
+        if (empty($apiKey)) {
+            log_message('error', 'Cloudchat API Key not set');
+            return false;
+        }
+
+        // Format phone number to start with 62 instead of 0, 8, or +62
+        $phone = format_phone_international($phone);
+
+        $url = 'https://app.cloudchat.id/api/public/v1/messages';
+        $message = "*$otp* adalah kode verifikasi OTP Anda. Demi keamanan, jangan berikan kode ini kepada siapapun.";
+
+        $data = [
+            'channel' => 'whatsapp',
+            'type'    => 'text',
+            'to'      => $phone,
+            'content' => [
+                'text' => $message,
+            ],
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+        ]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode == 200 || $httpCode == 201) {
+            $responseData = json_decode($response, true);
+            if (isset($responseData['success']) && $responseData['success'] === false) {
+                log_message('error', 'Cloudchat API Soft Error: ' . $response);
+                return false;
+            }
+            return true;
+        } else {
+            log_message('error', 'Cloudchat API Error HTTP ' . $httpCode . ' (' . $curlErr . '): ' . $response);
+            return false;
+        }
+    }
+}
+
+if (!function_exists('send_bablast_otp')) {
+    function send_bablast_otp($phone, $otp)
     {
         $apiKey = get_otp_key('bablast_api_key');
         if (empty($apiKey)) {
@@ -59,6 +114,9 @@ if (!function_exists('send_whatsapp_otp')) {
             'Content-Type: application/json',
             'Authorization: Bearer ' . $apiKey
         ]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -67,16 +125,49 @@ if (!function_exists('send_whatsapp_otp')) {
         if ($httpCode == 200 || $httpCode == 201) {
             $responseData = json_decode($response, true);
             if (isset($responseData['success']) && $responseData['success'] === false) {
-                // Meta/Bablast failed, fallback to Whapify
-                log_message('error', 'Bablast API Soft Error: ' . $response . ' -> Fallback to Whapify');
-                return send_whapify_otp($phone, $otp);
+                log_message('error', 'Bablast API Soft Error: ' . $response);
+                return false;
             }
             return true;
         } else {
-            log_message('error', 'Bablast API Error HTTP ' . $httpCode . ': ' . $response . ' -> Fallback to Whapify');
-            // Fallback to Whapify
-            return send_whapify_otp($phone, $otp);
+            log_message('error', 'Bablast API Error HTTP ' . $httpCode . ': ' . $response);
+            return false;
         }
+    }
+}
+
+if (!function_exists('send_whatsapp_otp')) {
+    function send_whatsapp_otp($phone, $otp)
+    {
+        // 1. Coba Cloudchat jika API Key terisi
+        $cloudchatKey = get_otp_key('cloudchat_api_key');
+        if (!empty($cloudchatKey)) {
+            if (send_cloudchat_otp($phone, $otp)) {
+                return true;
+            }
+            log_message('info', 'Cloudchat gagal/error -> Fallback ke gateway cadangan');
+        }
+
+        // 2. Coba Bablast WABA jika API Key terisi
+        $bablastKey = get_otp_key('bablast_api_key');
+        if (!empty($bablastKey)) {
+            if (send_bablast_otp($phone, $otp)) {
+                return true;
+            }
+            log_message('info', 'Bablast gagal/error -> Fallback ke Whapify');
+        }
+
+        // 3. Coba Whapify jika API Secret & Account ID terisi
+        $whapifySecret = get_otp_key('whapify_api_secret');
+        if (!empty($whapifySecret)) {
+            if (send_whapify_otp($phone, $otp)) {
+                return true;
+            }
+            log_message('info', 'Whapify gagal/error -> Fallback ke Fonnte');
+        }
+
+        // 4. Coba Fonnte sebagai fallback terakhir
+        return send_fonnte_otp($phone, $otp);
     }
 }
 

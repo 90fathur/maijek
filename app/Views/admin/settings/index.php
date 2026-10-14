@@ -429,11 +429,17 @@
         <div class="card-table" style="padding: 32px;">
             <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 24px;"><i class="fa-brands fa-whatsapp" style="color: #25D366; margin-right: 8px;"></i> Integrasi API OTP (WhatsApp)</h2>
             <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 20px;">
-                Isi token API untuk pengiriman OTP. Sistem menggunakan skema fallback otomatis: <strong>Bablast &rarr; Whapify &rarr; Fonnte</strong>.
+                Isi token API untuk pengiriman OTP. Sistem menggunakan skema fallback otomatis: <strong>Cloudchat &rarr; Bablast &rarr; Whapify &rarr; Fonnte</strong>.
             </p>
 
             <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500;">Bablast API Key (WABA Utama)</label>
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500;">Cloudchat API Key (Gateway Utama)</label>
+                <input type="text" name="cloudchat_api_key" value="<?= esc($cloudchat_api_key['setting_value'] ?? '') ?>" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; outline:none;" placeholder="sk_...">
+                <small style="color: var(--text-muted);">Endpoint Cloudchat: <code>https://app.cloudchat.id/api/public/v1/messages</code></small>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500;">Bablast API Key (WABA Cadangan 1)</label>
                 <input type="text" name="bablast_api_key" value="<?= esc($bablast_api_key['setting_value'] ?? '') ?>" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; outline:none;" placeholder="Masukkan Bablast Token">
             </div>
 
