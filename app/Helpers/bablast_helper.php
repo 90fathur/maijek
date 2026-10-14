@@ -12,7 +12,17 @@ if (!function_exists('get_otp_key')) {
         } catch (\Exception $e) {
         }
 
-        return env(strtoupper($key));
+        $envVal = env(strtoupper($key));
+        if (!empty($envVal)) {
+            return $envVal;
+        }
+
+        // Default fallback jika belum diset di DB settings atau .env server
+        if (strtolower($key) === 'cloudchat_api_key') {
+            return 'sk_34e728ab46ce232f863ee055122fc5c5f2b3f4756fede6f6';
+        }
+
+        return null;
     }
 }
 
