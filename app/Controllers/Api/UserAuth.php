@@ -89,23 +89,22 @@ class UserAuth extends ResourceController
         $photoName = null;
         $file = $this->request->getFile('photo');
         if ($file && $file->isValid() && !$file->hasMoved()) {
-            $ext = strtolower($file->guessExtension() ?? $file->getExtension() ?? '');
-            $mime = $file->getMimeType();
-            $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-            $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-
-            if (!in_array($ext, $allowedExts) || !in_array($mime, $allowedMimes)) {
-                return $this->respond([
-                    'status' => 400,
-                    'message' => 'Format file foto tidak valid. Gunakan file gambar JPG, PNG, atau WEBP.',
-                    'data' => null
-                ], 400);
-            }
-
             if ($file->getSize() > 10 * 1024 * 1024) {
                 return $this->respond([
                     'status' => 400,
                     'message' => 'Ukuran foto profil maksimal 10MB.',
+                    'data' => null
+                ], 400);
+            }
+
+            $safeExt = function_exists('validate_uploaded_file_ext')
+                ? validate_uploaded_file_ext($file, ['jpg', 'jpeg', 'png', 'webp'])
+                : null;
+
+            if (!$safeExt) {
+                return $this->respond([
+                    'status' => 400,
+                    'message' => 'Format file foto tidak valid. Gunakan file gambar JPG, PNG, atau WEBP.',
                     'data' => null
                 ], 400);
             }

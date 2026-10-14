@@ -771,12 +771,15 @@ class Orders extends ResourceController
             return $this->respond(['status' => 400, 'message' => 'File gambar tidak valid'], 400);
         }
 
-        $ext = strtolower($file->guessExtension() ?? $file->getExtension() ?? '');
-        $mime = $file->getMimeType();
-        $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+        if ($file->getSize() > 10 * 1024 * 1024) {
+            return $this->respond(['status' => 400, 'message' => 'Ukuran file bukti melebihi 10MB.'], 400);
+        }
 
-        if (!in_array($ext, $allowedExts) || !in_array($mime, $allowedMimes)) {
+        $safeExt = function_exists('validate_uploaded_file_ext')
+            ? validate_uploaded_file_ext($file, ['jpg', 'jpeg', 'png', 'webp'])
+            : null;
+
+        if (!$safeExt) {
             return $this->respond(['status' => 400, 'message' => 'Format file bukti tidak valid. Hanya JPG, PNG, atau WEBP.'], 400);
         }
 
@@ -784,8 +787,7 @@ class Orders extends ResourceController
             mkdir(FCPATH . 'uploads/orders', 0755, true);
         }
 
-        $safeExt = in_array($ext, $allowedExts) ? $ext : 'jpg';
-        $newName = $file->getRandomName();
+        $newName = uniqid('order_proof_') . '.' . $safeExt;
         $file->move(FCPATH . 'uploads/orders', $newName);
         $imageUrl = 'uploads/orders/' . $newName;
 

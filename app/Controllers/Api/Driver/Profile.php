@@ -291,24 +291,18 @@ class Profile extends ResourceController
             'vehicle_image' => 'uploads/kyc',
         ];
 
-        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-
         foreach ($files as $field => $folder) {
             $file = $this->request->getFile($field);
             if ($file && $file->isValid() && !$file->hasMoved()) {
-                $ext = strtolower($file->guessExtension() ?? $file->getExtension() ?? '');
-                $mime = $file->getMimeType();
-
-                if (!in_array($ext, $allowedExts) || !in_array($mime, $allowedMimes)) {
-                    return $this->respond(['status' => 400, 'message' => "Format file {$field} tidak diizinkan. Hanya JPG, PNG, WEBP, atau PDF."], 400);
-                }
-
                 if ($file->getSize() > 10 * 1024 * 1024) {
                     return $this->respond(['status' => 400, 'message' => "Ukuran file {$field} melebihi batas 10MB."], 400);
                 }
 
-                $safeExt = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'pdf']) ? $ext : 'jpg';
+                $safeExt = $this->determineSafeFileExt($file, ['jpg', 'jpeg', 'png', 'webp', 'pdf']);
+                if (!$safeExt) {
+                    return $this->respond(['status' => 400, 'message' => "Format file {$field} tidak diizinkan. Hanya JPG, PNG, WEBP, atau PDF."], 400);
+                }
+
                 $newName = uniqid($field . '_') . '.' . $safeExt;
 
                 $file->move(FCPATH . $folder, $newName);
@@ -338,11 +332,16 @@ class Profile extends ResourceController
             mkdir(FCPATH . 'uploads/profiles', 0777, true);
         }
 
-        $ext = strtolower($file->guessExtension() ?? $file->getExtension() ?? 'jpg');
-        if (empty($ext) || $ext === 'bin' || !in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
-            $ext = 'jpg';
+        if ($file->getSize() > 10 * 1024 * 1024) {
+            return $this->respond(['status' => 400, 'message' => 'Ukuran foto profil melebihi 10MB.'], 400);
         }
-        $newName = uniqid('profile_') . '.' . $ext;
+
+        $safeExt = $this->determineSafeFileExt($file, ['jpg', 'jpeg', 'png', 'webp']);
+        if (!$safeExt) {
+            return $this->respond(['status' => 400, 'message' => 'Format file foto tidak diizinkan. Hanya JPG, PNG, atau WEBP.'], 400);
+        }
+
+        $newName = uniqid('profile_') . '.' . $safeExt;
 
         $file->move(FCPATH . 'uploads/profiles', $newName);
         $photoPath = 'uploads/profiles/' . $newName;
@@ -501,24 +500,19 @@ class Profile extends ResourceController
 
         $file = $this->request->getFile('qris_image');
         if ($file && $file->isValid() && !$file->hasMoved()) {
-            $ext = strtolower($file->guessExtension() ?? $file->getExtension() ?? '');
-            $mime = $file->getMimeType();
-            $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-            $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-
-            if (!in_array($ext, $allowedExts) || !in_array($mime, $allowedMimes)) {
-                return $this->respond(['status' => 400, 'message' => 'Format file QRIS tidak valid. Gunakan gambar JPG, PNG, atau WEBP.'], 400);
-            }
-
             if ($file->getSize() > 10 * 1024 * 1024) {
                 return $this->respond(['status' => 400, 'message' => 'Ukuran file QRIS melebihi 10MB.'], 400);
+            }
+
+            $safeExt = $this->determineSafeFileExt($file, ['jpg', 'jpeg', 'png', 'webp']);
+            if (!$safeExt) {
+                return $this->respond(['status' => 400, 'message' => 'Format file QRIS tidak valid. Gunakan gambar JPG, PNG, atau WEBP.'], 400);
             }
 
             if (!is_dir(FCPATH . 'uploads/drivers/qris')) {
                 mkdir(FCPATH . 'uploads/drivers/qris', 0755, true);
             }
 
-            $safeExt = in_array($ext, $allowedExts) ? $ext : 'jpg';
             $newName = 'qris_' . $payload['uid'] . '_' . time() . '.' . $safeExt;
 
             $file->move(FCPATH . 'uploads/drivers/qris', $newName);
@@ -615,5 +609,53 @@ class Profile extends ResourceController
             'status' => 403,
             'message' => 'Perubahan data kendaraan hanya dapat dilakukan oleh Kantor Operasional / Panel Admin Maijek.'
         ], 403);
+    }
+
+    /**
+     * Memvalidasi file upload gambar/dokumen secara mendalam dan mengembalikan ekstensi yang aman.
+     */
+    private function determineSafeFileExt($file, array $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf']): ?string
+    {
+        if (function_exists('validate_uploaded_file_ext')) {
+            $ext = validate_uploaded_file_ext($file, $allowedExts);
+            if ($ext) return $ext;
+        }
+
+        if (!$file || !$file->isValid() || $file->hasMoved()) {
+            return null;
+        }
+
+        $tempPath = $file->getTempName();
+        $detectedExt = null;
+
+        if (!empty($tempPath) && file_exists($tempPath) && is_readable($tempPath)) {
+            $imgInfo = @getimagesize($tempPath);
+            if ($imgInfo !== false && isset($imgInfo[2])) {
+                switch ($imgInfo[2]) {
+                    case IMAGETYPE_JPEG:
+                        $detectedExt = 'jpg';
+                        break;
+                    case IMAGETYPE_PNG:
+                        $detectedExt = 'png';
+                        break;
+                    case IMAGETYPE_WEBP:
+                        $detectedExt = 'webp';
+                        break;
+                }
+            }
+        }
+
+        if (!$detectedExt) {
+            $clientExt = strtolower($file->getClientExtension() ?? pathinfo($file->getClientName() ?? '', PATHINFO_EXTENSION));
+            if (in_array($clientExt, ['jpg', 'jpeg', 'png', 'webp', 'pdf'])) {
+                $detectedExt = ($clientExt === 'jpeg') ? 'jpg' : $clientExt;
+            }
+        }
+
+        if ($detectedExt && in_array($detectedExt, $allowedExts)) {
+            return $detectedExt;
+        }
+
+        return null;
     }
 }
