@@ -648,6 +648,7 @@ $routes->group('admin', ['namespace' => 'App\Controllers\Admin', 'filter' => 'ad
     $routes->post('drivers/store', 'Drivers::store');
     $routes->post('drivers/changeStatus/(:num)', 'Drivers::changeStatus/$1');
     $routes->post('drivers/injectBalance/(:num)', 'Drivers::injectBalance/$1');
+    $routes->post('drivers/adjustBalance/(:num)', 'Drivers::adjustBalance/$1');
     $routes->post('drivers/resetPassword/(:num)', 'Drivers::resetPassword/$1');
     $routes->post('drivers/updateVehicle/(:num)', 'Drivers::updateVehicle/$1');
 

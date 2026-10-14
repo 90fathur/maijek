@@ -145,8 +145,15 @@
                                 </div>
                             </td>
                             <td>
-                                <strong>Rp <?= number_format($driver['balance'] ?? 0, 0, ',', '.') ?></strong><br>
-                                <span style="color: #f59e0b; font-size: 0.875rem;"><i class="fa-solid fa-coins"></i> <?= number_format($driver['coins'] ?? 0) ?> Koin</span>
+                                <div style="margin-bottom: 2px;">
+                                    <strong style="color: #047857; font-size: 0.95rem;">Rp <?= number_format($driver['balance'] ?? 0, 0, ',', '.') ?></strong>
+                                </div>
+                                <div style="color: #f59e0b; font-size: 0.825rem; margin-bottom: 6px;">
+                                    <i class="fa-solid fa-coins"></i> <?= number_format($driver['coins'] ?? 0) ?> Koin
+                                </div>
+                                <button type="button" onclick="openManageBalanceModal(<?= htmlspecialchars(json_encode($driver), ENT_QUOTES, 'UTF-8') ?>)" style="padding: 4px 8px; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;">
+                                    <i class="fa-solid fa-wallet"></i> Kelola Saldo
+                                </button>
                             </td>
                             <td>
                                 <?php if ($driver['status'] == 'active'): ?>
@@ -164,6 +171,11 @@
                                         <i class="fa-solid fa-car-side"></i> Edit Kendaraan
                                     </button>
 
+                                    <!-- Tombol Kelola Saldo MaiPay (Tambah / Kurang) -->
+                                    <button type="button" onclick="openManageBalanceModal(<?= htmlspecialchars(json_encode($driver), ENT_QUOTES, 'UTF-8') ?>)" style="width: 100%; padding: 7px; background: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.2s;">
+                                        <i class="fa-solid fa-money-bill-transfer"></i> Kelola Saldo MaiPay
+                                    </button>
+
                                     <!-- Form Ubah Status -->
                                     <form action="<?= base_url('admin/drivers/changeStatus/' . $driver['id']) ?>" method="post" style="display: flex; gap: 8px; width: 100%;">
                                         <select name="status" style="flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.875rem; outline: none; min-width: 0;">
@@ -173,14 +185,6 @@
                                         </select>
                                         <button type="submit" style="width: 80px; padding: 6px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; transition: background 0.2s; white-space: nowrap;">
                                             Simpan
-                                        </button>
-                                    </form>
-
-                                    <!-- Form Suntik Saldo -->
-                                    <form action="<?= base_url('admin/drivers/injectBalance/' . $driver['id']) ?>" method="post" onsubmit="return confirm('Yakin ingin menyuntikkan saldo ke driver ini?');" style="display: flex; gap: 8px; width: 100%;">
-                                        <input type="number" name="amount" placeholder="Nominal" required style="flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.875rem; outline: none; min-width: 0;">
-                                        <button type="submit" style="width: 80px; padding: 6px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; transition: background 0.2s; white-space: nowrap;">
-                                            Suntik
                                         </button>
                                     </form>
 
@@ -316,7 +320,221 @@
     </div>
 </div>
 
+<!-- Modal Kelola Saldo Driver (Tambah & Kurang Saldo MaiPay) -->
+<div id="manageBalanceModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: var(--bg-card); padding: 28px; border-radius: 16px; width: 92%; max-width: 520px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); position: relative; max-height: 90vh; overflow-y: auto;" class="animate-fade">
+        <button type="button" onclick="closeManageBalanceModal()" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; line-height: 1;">&times;</button>
+        
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <div style="width: 38px; height: 38px; border-radius: 10px; background: #ecfdf5; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+                <i class="fa-solid fa-wallet"></i>
+            </div>
+            <div>
+                <h2 style="margin: 0; font-size: 1.25rem; font-weight: 700;">Kelola Saldo MaiPay Pengemudi</h2>
+                <p id="mb_driver_info" style="margin: 2px 0 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 500;"></p>
+            </div>
+        </div>
+
+        <!-- Kartu Ringkasan Saldo Saat Ini & Estimasi Saldo Baru -->
+        <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px 16px; margin: 18px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+                <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">Saldo Saat Ini</span>
+                <span id="mb_current_balance_text" style="font-size: 1.15rem; font-weight: 800; color: var(--text-color);">Rp 0</span>
+            </div>
+            <div style="border-left: 1px solid var(--border-color); padding-left: 14px;">
+                <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">Estimasi Saldo Baru</span>
+                <span id="mb_preview_balance_text" style="font-size: 1.15rem; font-weight: 800; color: #059669;">Rp 0</span>
+            </div>
+        </div>
+
+        <form id="manageBalanceForm" action="" method="post" onsubmit="return validateManageBalanceForm();">
+            <!-- Pilihan Tindakan: Tambah (+) vs Kurang (-) -->
+            <div style="margin-bottom: 18px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Jenis Penyesuaian Saldo</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <label id="mb_btn_add" onclick="setBalanceAction('add')" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 10px; border: 2px solid #10b981; background: #ecfdf5; color: #047857; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                        <input type="radio" name="action" id="mb_radio_add" value="add" checked style="display: none;">
+                        <i class="fa-solid fa-circle-plus" style="font-size: 1.1rem;"></i> Tambah Saldo
+                    </label>
+                    <label id="mb_btn_deduct" onclick="setBalanceAction('deduct')" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 10px; border: 2px solid var(--border-color); background: var(--bg-body); color: var(--text-muted); font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                        <input type="radio" name="action" id="mb_radio_deduct" value="deduct" style="display: none;">
+                        <i class="fa-solid fa-circle-minus" style="font-size: 1.1rem;"></i> Kurangi Saldo
+                    </label>
+                </div>
+            </div>
+
+            <!-- Input Nominal Saldo -->
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">
+                    Nominal Penyesuaian (Rp) <span style="color: #ef4444;">*</span>
+                </label>
+                <div style="position: relative;">
+                    <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 700; color: var(--text-muted); font-size: 1rem;">Rp</span>
+                    <input type="number" name="amount" id="mb_amount_input" required min="1" placeholder="Contoh: 50000" oninput="updateBalancePreview()" style="width: 100%; padding: 12px 14px 12px 44px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-body); color: var(--text-color); font-size: 1.05rem; font-weight: 700; outline: none;">
+                </div>
+                <!-- Quick Preset Chips -->
+                <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+                    <button type="button" onclick="setPresetAmount(10000)" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color); font-size: 0.75rem; font-weight: 600; cursor: pointer;">+10.000</button>
+                    <button type="button" onclick="setPresetAmount(20000)" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color); font-size: 0.75rem; font-weight: 600; cursor: pointer;">+20.000</button>
+                    <button type="button" onclick="setPresetAmount(50000)" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color); font-size: 0.75rem; font-weight: 600; cursor: pointer;">+50.000</button>
+                    <button type="button" onclick="setPresetAmount(100000)" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color); font-size: 0.75rem; font-weight: 600; cursor: pointer;">+100.000</button>
+                    <button type="button" onclick="setPresetAmount(200000)" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color); font-size: 0.75rem; font-weight: 600; cursor: pointer;">+200.000</button>
+                    <button type="button" onclick="setPresetAmount(500000)" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color); font-size: 0.75rem; font-weight: 600; cursor: pointer;">+500.000</button>
+                </div>
+            </div>
+
+            <!-- Keterangan / Alasan -->
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Keterangan / Alasan (Opsional)</label>
+                <input type="text" name="note" id="mb_note_input" placeholder="Contoh: Top Up Manual / Insentif / Koreksi Selisih" style="width: 100%; padding: 11px 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-body); color: var(--text-color); font-size: 0.875rem; outline: none;">
+            </div>
+
+            <!-- Toggle Notifikasi Push FCM -->
+            <div style="margin-bottom: 24px; background: var(--bg-body); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 0;">
+                    <input type="checkbox" name="send_notif" value="1" checked style="width: 18px; height: 18px; accent-color: #10b981; cursor: pointer;">
+                    <div>
+                        <span style="font-size: 0.875rem; font-weight: 600; display: block; color: var(--text-color);">Kirim Notifikasi Realtime ke HP Pengemudi</span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">Pemberitahuan perubahan saldo akan langsung terkirim via FCM ke aplikasi driver</span>
+                    </div>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button type="button" onclick="closeManageBalanceModal()" style="padding: 12px 20px; border-radius: 8px; background: var(--bg-body); color: var(--text-color); border: 1px solid var(--border-color); cursor: pointer; font-weight: 600;">Batal</button>
+                <button type="submit" id="mb_submit_btn" style="padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; background: #059669; color: white; display: flex; align-items: center; gap: 8px; font-size: 0.95rem; box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);">
+                    <i class="fa-solid fa-check"></i> <span id="mb_submit_btn_text">Tambah Saldo MaiPay</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+var currentManagingDriver = null;
+var currentBalanceAction = 'add';
+
+function formatRupiah(num) {
+    return 'Rp ' + Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function openManageBalanceModal(driver) {
+    currentManagingDriver = driver;
+    currentBalanceAction = 'add';
+
+    document.getElementById('mb_driver_info').textContent = (driver.name || '') + ' (' + (driver.phone || '') + ') • Plat: ' + (driver.vehicle_plate || '-').toUpperCase();
+    document.getElementById('manageBalanceForm').action = '<?= base_url('admin/drivers/adjustBalance') ?>/' + driver.id;
+
+    var bal = parseFloat(driver.balance) || 0;
+    document.getElementById('mb_current_balance_text').textContent = formatRupiah(bal);
+    document.getElementById('mb_amount_input').value = '';
+    document.getElementById('mb_note_input').value = '';
+
+    setBalanceAction('add');
+    updateBalancePreview();
+
+    document.getElementById('manageBalanceModal').style.display = 'flex';
+    setTimeout(function() {
+        document.getElementById('mb_amount_input').focus();
+    }, 100);
+}
+
+function closeManageBalanceModal() {
+    document.getElementById('manageBalanceModal').style.display = 'none';
+}
+
+function setBalanceAction(action) {
+    currentBalanceAction = action;
+    var radioAdd = document.getElementById('mb_radio_add');
+    var radioDeduct = document.getElementById('mb_radio_deduct');
+    var btnAdd = document.getElementById('mb_btn_add');
+    var btnDeduct = document.getElementById('mb_btn_deduct');
+    var submitBtn = document.getElementById('mb_submit_btn');
+    var submitText = document.getElementById('mb_submit_btn_text');
+
+    if (action === 'deduct') {
+        radioDeduct.checked = true;
+        radioAdd.checked = false;
+
+        btnDeduct.style.borderColor = '#ef4444';
+        btnDeduct.style.background = '#fef2f2';
+        btnDeduct.style.color = '#b91c1c';
+
+        btnAdd.style.borderColor = 'var(--border-color)';
+        btnAdd.style.background = 'var(--bg-body)';
+        btnAdd.style.color = 'var(--text-muted)';
+
+        submitBtn.style.background = '#dc2626';
+        submitBtn.style.boxShadow = '0 2px 6px rgba(220, 38, 38, 0.3)';
+        submitText.textContent = 'Kurangi Saldo MaiPay';
+    } else {
+        radioAdd.checked = true;
+        radioDeduct.checked = false;
+
+        btnAdd.style.borderColor = '#10b981';
+        btnAdd.style.background = '#ecfdf5';
+        btnAdd.style.color = '#047857';
+
+        btnDeduct.style.borderColor = 'var(--border-color)';
+        btnDeduct.style.background = 'var(--bg-body)';
+        btnDeduct.style.color = 'var(--text-muted)';
+
+        submitBtn.style.background = '#059669';
+        submitBtn.style.boxShadow = '0 2px 6px rgba(5, 150, 105, 0.3)';
+        submitText.textContent = 'Tambah Saldo MaiPay';
+    }
+
+    updateBalancePreview();
+}
+
+function setPresetAmount(val) {
+    document.getElementById('mb_amount_input').value = val;
+    updateBalancePreview();
+}
+
+function updateBalancePreview() {
+    if (!currentManagingDriver) return;
+    var currentBal = parseFloat(currentManagingDriver.balance) || 0;
+    var amount = parseFloat(document.getElementById('mb_amount_input').value) || 0;
+    var previewEl = document.getElementById('mb_preview_balance_text');
+
+    var newBal = currentBal;
+    if (currentBalanceAction === 'deduct') {
+        newBal = currentBal - amount;
+        if (newBal < 0) {
+            previewEl.textContent = formatRupiah(newBal) + ' (Saldo Minus!)';
+            previewEl.style.color = '#dc2626';
+        } else {
+            previewEl.textContent = formatRupiah(newBal);
+            previewEl.style.color = '#d97706';
+        }
+    } else {
+        newBal = currentBal + amount;
+        previewEl.textContent = formatRupiah(newBal);
+        previewEl.style.color = '#059669';
+    }
+}
+
+function validateManageBalanceForm() {
+    if (!currentManagingDriver) return false;
+    var currentBal = parseFloat(currentManagingDriver.balance) || 0;
+    var amount = parseFloat(document.getElementById('mb_amount_input').value) || 0;
+
+    if (amount <= 0) {
+        alert('Mohon masukkan nominal saldo yang valid (lebih dari Rp 0)!');
+        document.getElementById('mb_amount_input').focus();
+        return false;
+    }
+
+    if (currentBalanceAction === 'deduct' && amount > currentBal) {
+        var proceed = confirm('Peringatan: Nominal pemotongan (' + formatRupiah(amount) + ') melebihi saldo driver saat ini (' + formatRupiah(currentBal) + '). Pemotongan ini akan gagal jika saldo tidak mencukupi.\n\nApakah Anda tetap ingin melanjutkan?');
+        return proceed;
+    }
+
+    var actionName = (currentBalanceAction === 'deduct') ? 'MENGURANGI' : 'MENAMBAH';
+    return confirm('Apakah Anda yakin ingin ' + actionName + ' saldo pengemudi ' + (currentManagingDriver.name || '') + ' sebesar ' + formatRupiah(amount) + '?');
+}
+
 function openEditVehicleModal(driver) {
     document.getElementById('editVehicleDriverName').textContent = 'Pengemudi: ' + (driver.name || '') + ' (' + (driver.phone || '') + ')';
     document.getElementById('editVehicleForm').action = '<?= base_url('admin/drivers/updateVehicle') ?>/' + driver.id;

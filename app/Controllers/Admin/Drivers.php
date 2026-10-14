@@ -75,25 +75,93 @@ class Drivers extends BaseController
         return redirect()->to('/admin/drivers');
     }
 
-    public function injectBalance($id)
+    public function adjustBalance($id)
     {
-        $amount = $this->request->getPost('amount');
+        $action = strtolower(trim((string)($this->request->getPost('action') ?? 'add'))); // 'add' atau 'deduct'
+        $amount = (float)$this->request->getPost('amount');
+        $note = trim((string)$this->request->getPost('note'));
+        $sendNotif = $this->request->getPost('send_notif') !== '0';
 
-        if (is_numeric($amount) && $amount > 0) {
-            $driverModel = new DriverModel();
-            $driver = $driverModel->find($id);
-
-            if ($driver) {
-                // Tambahkan saldo
-                $newBalance = ($driver['balance'] ?? 0) + $amount;
-                $driverModel->update($id, ['balance' => $newBalance]);
-
-                // Bisa tambahkan pencatatan ke tabel transaksi/topup jika perlu
-                // Namun untuk sekedar inject saldo, update kolom balance sudah cukup.
-            }
+        if ($amount <= 0) {
+            session()->setFlashdata('success', 'Gagal: Nominal saldo harus lebih besar dari Rp 0!');
+            return redirect()->to('/admin/drivers');
         }
 
+        $driverModel = new DriverModel();
+        $driver = $driverModel->find($id);
+
+        if (!$driver) {
+            session()->setFlashdata('success', 'Gagal: Data pengemudi tidak ditemukan!');
+            return redirect()->to('/admin/drivers');
+        }
+
+        $currentBalance = (float)($driver['balance'] ?? 0);
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        if ($action === 'deduct') {
+            if ($currentBalance < $amount) {
+                $db->transRollback();
+                session()->setFlashdata('success', 'Gagal: Saldo pengemudi saat ini (Rp ' . number_format($currentBalance, 0, ',', '.') . ') tidak mencukupi untuk dipotong sebesar Rp ' . number_format($amount, 0, ',', '.') . '!');
+                return redirect()->to('/admin/drivers');
+            }
+
+            $newBalance = $currentBalance - $amount;
+            $txType = 'debit';
+            $desc = 'Pemotongan Saldo MaiPay oleh Admin' . ($note ? ": $note" : '');
+            $notifTitle = 'Penyesuaian Saldo MaiPay ⚠️';
+            $notifBody = 'Saldo MaiPay Anda telah dipotong sebesar Rp ' . number_format($amount, 0, ',', '.') . ($note ? " ($note)" : '') . '. Sisa saldo: Rp ' . number_format($newBalance, 0, ',', '.');
+        } else {
+            $newBalance = $currentBalance + $amount;
+            $txType = 'credit';
+            $desc = 'Penambahan Saldo MaiPay oleh Admin' . ($note ? ": $note" : '');
+            $notifTitle = 'Saldo MaiPay Bertambah! 💰';
+            $notifBody = 'Saldo MaiPay Anda telah ditambahkan sebesar Rp ' . number_format($amount, 0, ',', '.') . ($note ? " ($note)" : '') . '. Total saldo: Rp ' . number_format($newBalance, 0, ',', '.');
+        }
+
+        // 1. Update saldo pengemudi
+        $db->table('drivers')->where('id', $id)->update(['balance' => $newBalance]);
+
+        // 2. Catat ke tabel riwayat transaksi (transactions)
+        if ($db->tableExists('transactions')) {
+            $db->table('transactions')->insert([
+                'driver_id'   => $id,
+                'user_id'     => null,
+                'type'        => $txType,
+                'amount'      => (int)$amount,
+                'description' => $desc,
+                'created_at'  => date('Y-m-d H:i:s'),
+                'updated_at'  => date('Y-m-d H:i:s')
+            ]);
+        }
+
+        $db->transComplete();
+
+        // 3. Kirim notifikasi FCM langsung ke HP pengemudi
+        if ($sendNotif && !empty($driver['fcm_token'])) {
+            try {
+                $fcm = new \App\Libraries\FcmService();
+                $fcm->sendPushNotification($driver['fcm_token'], $notifTitle, $notifBody, [
+                    'type' => 'wallet_balance_adjusted',
+                    'action' => $action,
+                    'amount' => (string)$amount,
+                    'new_balance' => (string)$newBalance
+                ]);
+            } catch (\Throwable $e) {}
+        }
+
+        $actionWord = ($action === 'deduct') ? 'dipotong' : 'ditambahkan';
+        session()->setFlashdata('success', 'Berhasil: Saldo MaiPay pengemudi ' . esc($driver['name']) . ' berhasil ' . $actionWord . ' sebesar Rp ' . number_format($amount, 0, ',', '.') . '. Saldo baru: Rp ' . number_format($newBalance, 0, ',', '.') . '.');
+
         return redirect()->to('/admin/drivers');
+    }
+
+    public function injectBalance($id)
+    {
+        if (!$this->request->getPost('action')) {
+            $_POST['action'] = 'add';
+        }
+        return $this->adjustBalance($id);
     }
 
     public function resetPassword($id)
