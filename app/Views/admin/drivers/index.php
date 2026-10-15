@@ -39,11 +39,16 @@
     }
 </style>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 10px;">
     <h1 class="page-title animate-fade" style="margin-bottom: 0;">Manajemen Pengemudi</h1>
-    <button onclick="document.getElementById('addDriverModal').style.display='flex'" class="btn-primary animate-fade" style="animation-delay: 0.1s;">
-        <i class="fa-solid fa-plus" style="margin-right: 8px;"></i> Tambah Pengemudi
-    </button>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <a href="<?= base_url('admin/drivers/resetNegativeBalances') ?>" class="btn-secondary" style="padding: 9px 16px; font-size: 0.875rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3;" onclick="return confirm('Netralkan semua saldo pengemudi yang minus menjadi Rp 0?');" title="Netralkan saldo pengemudi yang minus ke Rp 0">
+            <i class="fa-solid fa-arrows-rotate"></i> Reset Saldo Minus
+        </a>
+        <button onclick="document.getElementById('addDriverModal').style.display='flex'" class="btn-primary animate-fade" style="animation-delay: 0.1s;">
+            <i class="fa-solid fa-plus" style="margin-right: 8px;"></i> Tambah Pengemudi
+        </button>
+    </div>
 </div>
 
 <?php if (session()->getFlashdata('success')): ?>
@@ -206,7 +211,7 @@
                             </td>
                             <td>
                                 <div style="margin-bottom: 2px;">
-                                    <strong style="color: #047857; font-size: 0.95rem;">Rp <?= number_format($driver['balance'] ?? 0, 0, ',', '.') ?></strong>
+                                    <strong style="color: <?= ((float)($driver['balance'] ?? 0) <= 0) ? '#dc2626' : '#047857' ?>; font-size: 0.95rem;">Rp <?= number_format(max(0, (float)($driver['balance'] ?? 0)), 0, ',', '.') ?></strong>
                                 </div>
                                 <div style="color: #f59e0b; font-size: 0.825rem; margin-bottom: 6px;">
                                     <i class="fa-solid fa-coins"></i> <?= number_format($driver['coins'] ?? 0) ?> Koin

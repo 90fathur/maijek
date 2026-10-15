@@ -7,6 +7,9 @@
         <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0;">Kelola batas minimal saldo pengemudi untuk menarik orderan dan batas penarikan dana (withdraw).</p>
     </div>
     <div style="display: flex; gap: 10px;">
+        <a href="<?= base_url('admin/driver-balance/resetNegative') ?>" class="btn-secondary" style="padding: 9px 16px; font-size: 0.875rem; border-radius: 8px; text-decoration: none; display: flex; align-items: center; gap: 6px; background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3;" onclick="return confirm('Netralkan semua saldo pengemudi yang minus menjadi Rp 0?');" title="Netralkan saldo negatif ke Rp 0">
+            <i class="fa-solid fa-arrows-rotate"></i> Reset Saldo Minus ke Rp 0
+        </a>
         <a href="<?= base_url('admin/withdrawals') ?>" class="btn-secondary" style="padding: 9px 16px; font-size: 0.875rem; border-radius: 8px; text-decoration: none; display: flex; align-items: center; gap: 6px;">
             <i class="fa-solid fa-money-bill-transfer"></i> Permintaan Tarik Saldo
         </a>
@@ -153,7 +156,7 @@
                     </option>
                 </select>
                 <small class="form-hint">
-                    Bila <b>AKTIF</b>, pengemudi dengan saldo Mai-Pay Rp 0 bebas mengambil order kapanpun. Bila <b>NONAKTIF</b>, driver wajib memiliki saldo minimal sesuai nominal di bawah untuk menerima pesanan tunai reguler.
+                    Bila <b>AKTIF</b>, pengemudi dengan saldo Mai-Pay Rp 0 bebas mengambil order kapanpun dan saldo <b>tidak akan terpotong sampai minus</b> saat menyelesaikan pesanan tunai. Bila <b>NONAKTIF</b>, driver wajib memiliki saldo minimal sesuai nominal di bawah untuk menerima pesanan tunai reguler.
                 </small>
             </div>
 

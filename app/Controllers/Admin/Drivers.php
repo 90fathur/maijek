@@ -49,6 +49,10 @@ class Drivers extends BaseController
         $pager = $driverModel->pager;
 
         $db = \Config\Database::connect();
+        try {
+            $db->table('drivers')->where('balance <', 0)->update(['balance' => 0]);
+        } catch (\Throwable $e) {}
+
         $totalPriorityCount = 0;
         try {
             if ($db->fieldExists('is_priority', 'drivers')) {
@@ -70,6 +74,19 @@ class Drivers extends BaseController
         ];
 
         return view('admin/drivers/index', $data);
+    }
+
+    public function resetNegativeBalances()
+    {
+        $db = \Config\Database::connect();
+        $affected = $db->table('drivers')->where('balance <', 0)->countAllResults();
+        if ($affected > 0) {
+            $db->table('drivers')->where('balance <', 0)->update(['balance' => 0]);
+            session()->setFlashdata('success', "Berhasil mereset {$affected} akun pengemudi dengan saldo minus menjadi Rp 0.");
+        } else {
+            session()->setFlashdata('success', 'Semua saldo pengemudi sudah normal (tidak ada saldo minus).');
+        }
+        return redirect()->to('/admin/drivers');
     }
 
     public function togglePriority($id)

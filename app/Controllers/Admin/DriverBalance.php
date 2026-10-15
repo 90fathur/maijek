@@ -13,6 +13,9 @@ class DriverBalance extends BaseController
         $settingModel = new SettingModel();
         $driverModel = new DriverModel();
         $db = \Config\Database::connect();
+        try {
+            $db->table('drivers')->where('balance <', 0)->update(['balance' => 0]);
+        } catch (\Throwable $e) {}
 
         // 1. Ambil pengaturan saldo driver
         $zeroBalance = $settingModel->where('setting_key', 'driver_zero_balance_enabled')->first();
@@ -59,6 +62,19 @@ class DriverBalance extends BaseController
         $this->saveOrUpdateSetting($settingModel, 'driver_min_withdraw', $this->request->getPost('driver_min_withdraw'));
 
         session()->setFlashdata('success', 'Kebijakan minimal saldo & penarikan driver berhasil disimpan!');
+        return redirect()->to('/admin/driver-balance');
+    }
+
+    public function resetNegative()
+    {
+        $db = \Config\Database::connect();
+        $affected = $db->table('drivers')->where('balance <', 0)->countAllResults();
+        if ($affected > 0) {
+            $db->table('drivers')->where('balance <', 0)->update(['balance' => 0]);
+            session()->setFlashdata('success', "Berhasil memulihkan {$affected} akun pengemudi! Semua saldo minus telah dinetralkan ke Rp 0.");
+        } else {
+            session()->setFlashdata('success', 'Semua saldo pengemudi sudah aman (Rp 0 atau lebih).');
+        }
         return redirect()->to('/admin/driver-balance');
     }
 

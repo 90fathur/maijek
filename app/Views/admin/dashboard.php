@@ -564,7 +564,7 @@ foreach ($activeDriversList as $drv) {
                             </td>
 
                             <td style="padding: 12px 18px; font-weight: 700; color: <?= ((float)($driver['balance'] ?? 0) < 10000) ? '#dc2626' : '#15803d' ?>;">
-                                Rp <?= number_format((float)($driver['balance'] ?? 0), 0, ',', '.') ?>
+                                Rp <?= number_format(max(0, (float)($driver['balance'] ?? 0)), 0, ',', '.') ?>
                             </td>
 
                             <td style="padding: 12px 18px; text-align: right;">

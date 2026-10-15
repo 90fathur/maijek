@@ -166,6 +166,21 @@ $routes->get('migrate-priority-dispatch', function () {
     return redirect()->to(base_url('api/migrate-priority-dispatch'));
 });
 
+// ==== LINK NETRALKAN SALDO MINUS DRIVER KE RP 0 ====
+$routes->get('api/fix-negative-balances', function () {
+    try {
+        $db = \Config\Database::connect();
+        $affected = $db->table('drivers')->where('balance <', 0)->countAllResults();
+        $db->table('drivers')->where('balance <', 0)->update(['balance' => 0]);
+        return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Netralkan Saldo Minus Driver</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:40px 20px;display:flex;justify-content:center;} .card{background:#fff;max-width:580px;width:100%;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);padding:32px;} h2{color:#059669;margin-top:0;} p{color:#4b5563;line-height:1.6;} code{background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:600;}</style></head><body><div class='card'><h2><span>🎉</span> Saldo Minus Berhasil Dinetralkan!</h2><p>Sebanyak <b>{$affected}</b> akun mitra pengemudi yang memiliki saldo minus telah dinetralkan kembali menjadi <b>Rp 0</b>.</p><p>Sistem telah diperbarui sehingga saldo driver yang masih Rp 0 <strong>tidak akan pernah terpotong sampai minus lagi</strong> ketika menyelesaikan order tunai.</p><div style='margin-top:24px;'><a href='" . base_url('admin/dashboard') . "' style='padding:10px 18px;background:#059669;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;'>Kembali ke Dashboard Admin</a></div></div></body></html>";
+    } catch (\Throwable $e) {
+        return "<h1>Gagal Reset Saldo Minus</h1><p style='color:red;'>Error: " . $e->getMessage() . "</p>";
+    }
+});
+$routes->get('fix-negative-balances', function () {
+    return redirect()->to(base_url('api/fix-negative-balances'));
+});
+
 
 // Helper to restrict debug / maintenance / direct DDL migration endpoints
 $isAuthorizedDebug = function () {
@@ -811,6 +826,8 @@ $routes->group('admin', ['namespace' => 'App\Controllers\Admin', 'filter' => 'ad
     $routes->post('drivers/updateVehicle/(:num)', 'Drivers::updateVehicle/$1');
     $routes->post('drivers/togglePriority/(:num)', 'Drivers::togglePriority/$1');
     $routes->get('drivers/togglePriority/(:num)', 'Drivers::togglePriority/$1');
+    $routes->post('drivers/resetNegativeBalances', 'Drivers::resetNegativeBalances');
+    $routes->get('drivers/resetNegativeBalances', 'Drivers::resetNegativeBalances');
 
     // Users
     $routes->get('users', 'Users::index');
@@ -834,6 +851,8 @@ $routes->group('admin', ['namespace' => 'App\Controllers\Admin', 'filter' => 'ad
     // Kebijakan Saldo Driver (Tarik Order & Penarikan Saldo)
     $routes->get('driver-balance', 'DriverBalance::index');
     $routes->post('driver-balance/update', 'DriverBalance::update');
+    $routes->get('driver-balance/resetNegative', 'DriverBalance::resetNegative');
+    $routes->post('driver-balance/resetNegative', 'DriverBalance::resetNegative');
 
     // Promos
     $routes->get('promos', 'Promos::index');

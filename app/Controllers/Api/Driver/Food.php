@@ -520,17 +520,35 @@ class Food extends ResourceController
                         ]);
                     }
                 } else {
-                    $db->table('drivers')->where('id', $payload['uid'])->set('balance', 'balance - ' . abs($netAdjustment), false)->update();
-                    if ($db->tableExists('transactions')) {
-                        $db->table('transactions')->insert([
-                            'driver_id'   => $payload['uid'],
-                            'user_id'     => $order['user_id'],
-                            'type'        => 'debit',
-                            'amount'      => (int)round(abs($netAdjustment)),
-                            'description' => "Potongan Fee Food #{$orderId} (Fee Rp " . number_format($komisi, 0, ',', '.') . ($discountSubsidi > 0 ? " - Subsidi Rp " . number_format($discountSubsidi, 0, ',', '.') : "") . ")",
-                            'created_at'  => date('Y-m-d H:i:s'),
-                            'updated_at'  => date('Y-m-d H:i:s'),
-                        ]);
+                    $targetDeduction = abs((float)$netAdjustment);
+
+                    // Ambil saldo driver saat ini untuk memastikan saldo TIDAK minus jika masih Rp 0
+                    $driverCurrent = $db->table('drivers')->select('balance')->where('id', $payload['uid'])->get()->getRow();
+                    $currentBal = $driverCurrent ? (float)$driverCurrent->balance : 0;
+
+                    // Jika saldo driver saat ini <= 0 (masih 0 saldo), tidak perlu dipotong sampai minus
+                    // Jika ada saldo, potong maksimal sebatas saldo yang tersedia
+                    $actualDeduction = max(0, min($currentBal, $targetDeduction));
+
+                    if ($actualDeduction > 0) {
+                        $db->table('drivers')->where('id', $payload['uid'])
+                            ->set('balance', 'GREATEST(0, balance - ' . (float)$actualDeduction . ')', false)
+                            ->update();
+
+                        if ($db->tableExists('transactions')) {
+                            $db->table('transactions')->insert([
+                                'driver_id'   => $payload['uid'],
+                                'user_id'     => $order['user_id'],
+                                'type'        => 'debit',
+                                'amount'      => (int)round($actualDeduction),
+                                'description' => "Potongan Fee Food #{$orderId} (Fee Rp " . number_format($komisi, 0, ',', '.') . ($discountSubsidi > 0 ? " - Subsidi Rp " . number_format($discountSubsidi, 0, ',', '.') : "") . ")",
+                                'created_at'  => date('Y-m-d H:i:s'),
+                                'updated_at'  => date('Y-m-d H:i:s'),
+                            ]);
+                        }
+                    } else {
+                        // Saldo driver masih 0 (atau minus sebelumnya), pastikan dinetralkan dan tidak minus
+                        $db->table('drivers')->where('id', $payload['uid'])->where('balance <', 0)->update(['balance' => 0]);
                     }
                 }
             }

@@ -199,6 +199,11 @@ class Dashboard extends BaseController
         $onlineMotor = $driverModel->where('is_online', 1)->where('status', 'active')->where('last_heartbeat_at >=', $fiveMinsAgo)->groupStart()->where('vehicle_type', 'motor')->orWhere('vehicle_type', null)->orWhere('vehicle_type', '')->groupEnd()->countAllResults();
         $onlineMobil = $driverModel->where('is_online', 1)->where('status', 'active')->where('last_heartbeat_at >=', $fiveMinsAgo)->whereIn('vehicle_type', ['mobil', 'car'])->countAllResults();
 
+        // Auto-heal / netralkan semua saldo minus menjadi Rp 0 agar tidak ada pengemudi dengan saldo negatif
+        try {
+            $db->table('drivers')->where('balance <', 0)->update(['balance' => 0]);
+        } catch (\Throwable $e) {}
+
         // Ambil daftar pengemudi aktif untuk pemantauan langsung di dashboard
         $activeDrivers = $driverModel->where('status', 'active')
             ->orderBy('is_online', 'DESC')
