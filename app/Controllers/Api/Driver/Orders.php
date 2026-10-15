@@ -887,5 +887,17 @@ class Orders extends ResourceController
         $order['driver_net_earnings'] = $driverNet;
         $order['wallet_adjustment'] = $netAdjustment;
         $order['cash_to_collect'] = ($order['payment_method'] === 'cash') ? (float)$order['price'] : 0;
+
+        $isTitip = isset($order['service_type']) && strpos(strtolower($order['service_type']), 'titip') !== false;
+        if ($isTitip) {
+            $titipCost = !empty($order['titip_total_cost']) ? (float)$order['titip_total_cost'] : (float)($order['titip_item_price'] ?? 0);
+            $order['titip_spending_cost'] = $titipCost;
+            // Jika pembayaran tunai: ongkir + modal belanja ditagih tunai
+            // Jika pembayaran Mai-Pay: ongkir sudah lunas via saldo, uang belanjaan WAJIB ditagih tunai ke pemesan
+            $order['cash_to_collect'] = ($order['payment_method'] === 'cash') 
+                ? ((float)$order['price'] + $titipCost) 
+                : $titipCost;
+            $order['titip_must_collect_shopping'] = $titipCost;
+        }
     }
 }

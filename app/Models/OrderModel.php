@@ -17,6 +17,7 @@ class OrderModel extends Model
         'driver_id',
         'service_type',
         'pickup_address',
+        'notes',
         'pickup_lat',
         'pickup_lng',
         'dropoff_address',
