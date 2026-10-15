@@ -31,6 +31,13 @@ class Orders extends BaseController
         $merchantId = session()->get('merchant_id');
         $db = \Config\Database::connect();
 
+        // Perbarui aktivitas kasir web (heartbeat live)
+        if ($merchantId) {
+            try {
+                $db->table('merchants')->where('id', $merchantId)->update(['last_active_at' => date('Y-m-d H:i:s')]);
+            } catch (\Throwable $e) {}
+        }
+
         $builder = $db->table('food_orders');
         $builder->select('food_orders.*, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate as driver_plate, drivers.vehicle_type as driver_vehicle_type');
         $builder->join('users', 'users.id = food_orders.user_id', 'left');
@@ -83,6 +90,13 @@ class Orders extends BaseController
 
         $db = \Config\Database::connect();
         $db->transStart();
+
+        // Perbarui aktivitas kasir web (heartbeat live)
+        if ($merchantId) {
+            try {
+                $db->table('merchants')->where('id', $merchantId)->update(['last_active_at' => date('Y-m-d H:i:s')]);
+            } catch (\Throwable $e) {}
+        }
 
         $merchant = $db->table('merchants')->where('id', $merchantId)->get()->getRow();
         $isMart = ($merchant && ($merchant->merchant_type ?? '') === 'mart');
@@ -138,43 +152,77 @@ class Orders extends BaseController
             'cancel_reason' => $updateData['cancel_reason'] ?? ''
         ]);
 
-        // 2. Broadcast ke Driver jika status 'processing' (merchant menerima & memasak) atau 'ready'
-        if ($status == 'processing' || $status == 'ready' || $status == 'accepted_by_merchant') {
-            if ($merchant && $merchant->latitude && $merchant->longitude) {
-                $pickupLat = $merchant->latitude;
-                $pickupLng = $merchant->longitude;
-                $targetVehicle = $order['vehicle_type'] ?? 'motor';
-
-                $builder = $db->table('drivers');
-                $builder->select("*, (6371 * acos(cos(radians($pickupLat)) * cos(radians(latitude)) * cos(radians(longitude) - radians($pickupLng)) + sin(radians($pickupLat)) * sin(radians(latitude)))) AS distance");
-                $builder->where('is_online', 1);
-                $builder->where('status', 'active');
-                $builder->where('fcm_token !=', null);
-                if (in_array(strtolower($targetVehicle), ['mobil', 'car'])) {
-                    $builder->whereIn('vehicle_type', ['mobil', 'Mobil', 'MOBIL', 'car', 'Car', 'car_premium']);
-                } else {
-                    $builder->whereIn('vehicle_type', ['motor', 'Motor', 'MOTOR']);
-                }
-                $builder->having('distance <=', 15);
-                $builder->orderBy('distance', 'ASC');
-                $drivers = $builder->get()->getResultArray();
-
-                foreach ($drivers as $d) {
-                    $driverBody = ($status == 'processing' || $status == 'accepted_by_merchant')
-                        ? ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' sedang menyiapkan pesanan. Ketuk untuk ambil order sekarang!'
-                        : ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' telah menyiapkan pesanan. Ketuk untuk ambil order!';
-
+        // 2. Broadcast / Notifikasi ke Driver
+        if (!empty($order['driver_id'])) {
+            // Driver sudah mengambil pesanan -> Jika status 'ready', beri tahu kurir bahwa order siap diambil
+            if ($status == 'ready') {
+                $driver = $db->table('drivers')->where('id', $order['driver_id'])->get()->getRow();
+                if ($driver && !empty($driver->fcm_token)) {
+                    $readyTitle = $isMart ? 'Belanjaan Siap Diambil 🛍️' : 'Makanan Siap Diambil 🍲';
+                    $readyBody = ($isMart ? 'Toko ' : 'Restoran ') . ($merchant->name ?? 'Mitra') . ' telah selesai menyiapkan pesanan #' . $orderId . '. Silakan ambil di kasir!';
                     $fcmService->sendPushNotification(
-                        $d['fcm_token'],
-                        ($isMart ? 'Pesanan Belanja (' : 'Pesanan Makanan (') . ($targetVehicle == 'mobil' ? 'Mobil 🚗' : 'Motor 🛵') . ')!',
-                        $driverBody,
+                        $driver->fcm_token,
+                        $readyTitle,
+                        $readyBody,
                         [
-                            'type'         => 'new_order',
-                            'order_type'   => $isMart ? 'mart' : 'food',
-                            'order_id'     => (string)$orderId,
-                            'vehicle_type' => $targetVehicle
+                            'type'       => $isMart ? 'mart_order_ready' : 'food_order_ready',
+                            'order_id'   => (string)$orderId,
+                            'order_type' => $isMart ? 'mart' : 'food'
                         ]
                     );
+                }
+            }
+        } else {
+            // Belum ada driver -> Otomatis broadcast ke kurir terdekat saat status 'processing' (merchant menerima & memasak) atau 'ready'
+            if ($status == 'processing' || $status == 'ready' || $status == 'accepted_by_merchant') {
+                if ($merchant && $merchant->latitude && $merchant->longitude) {
+                    $pickupLat = $merchant->latitude;
+                    $pickupLng = $merchant->longitude;
+                    $targetVehicle = strtolower($order['vehicle_type'] ?? 'motor');
+
+                    $builder = $db->table('drivers');
+                    $builder->select("*, (6371 * acos(cos(radians($pickupLat)) * cos(radians(latitude)) * cos(radians(longitude) - radians($pickupLng)) + sin(radians($pickupLat)) * sin(radians(latitude)))) AS distance");
+                    $builder->where('is_online', 1);
+                    $builder->where('status', 'active');
+                    $builder->where('verification_status', 'approved');
+                    $builder->where('fcm_token !=', null);
+                    $builder->where('fcm_token !=', '');
+
+                    try {
+                        if ($db->fieldExists('last_heartbeat_at', 'drivers')) {
+                            $builder->where('last_heartbeat_at >=', date('Y-m-d H:i:s', strtotime('-1 hours')));
+                        }
+                    } catch (\Throwable $e) {}
+
+                    if (in_array($targetVehicle, ['mobil', 'car'])) {
+                        $builder->whereIn('vehicle_type', ['mobil', 'Mobil', 'MOBIL', 'car', 'Car', 'car_premium']);
+                    } else {
+                        $builder->whereIn('vehicle_type', ['motor', 'Motor', 'MOTOR']);
+                    }
+                    $builder->having('distance <=', 15);
+                    $builder->orderBy('distance', 'ASC');
+                    $builder->limit(20);
+                    $drivers = $builder->get()->getResultArray();
+
+                    $vehicleLabel = in_array($targetVehicle, ['mobil', 'car']) ? 'Kurir Mobil 🚗' : 'Kurir Motor 🛵';
+
+                    foreach ($drivers as $d) {
+                        $driverBody = ($status == 'processing' || $status == 'accepted_by_merchant')
+                            ? ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' sedang menyiapkan pesanan. Ketuk untuk ambil order sekarang!'
+                            : ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' telah menyiapkan pesanan. Ketuk untuk ambil order!';
+
+                        $fcmService->sendPushNotification(
+                            $d['fcm_token'],
+                            ($isMart ? 'Order MaiMart (' : 'Order MaiFood (') . $vehicleLabel . ')!',
+                            $driverBody,
+                            [
+                                'type'         => $isMart ? 'new_mart_order' : 'new_food_order',
+                                'order_type'   => $isMart ? 'mart' : 'food',
+                                'order_id'     => (string)$orderId,
+                                'vehicle_type' => $targetVehicle
+                            ]
+                        );
+                    }
                 }
             }
         }

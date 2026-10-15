@@ -798,9 +798,12 @@ $processingIcon = $isMart ? 'fa-box-open' : 'fa-fire-burner';
             `;
         } else if (column === 'processing') {
             buttonsHtml = `
+                <div style="font-size: 0.8rem; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 6px 10px; border-radius: 8px; color: #065f46; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <i class="fa-solid fa-spinner fa-spin" style="color: #059669;"></i> Otomatis mencari kurir di sekitar...
+                </div>
                 <div class="card-actions">
                     <button type="button" onclick="updateOrderStatus(${order.id}, 'ready')" class="btn-action btn-ready">
-                        <i class="fa-solid fa-bell"></i> ${isMart ? 'Selesai Dikemas (Panggil Driver)' : 'Selesai (Siap Diambil Driver)'}
+                        <i class="fa-solid fa-check-double"></i> ${isMart ? 'Selesai Dikemas (Siap Diambil Kurir)' : 'Makanan Selesai (Siap Diambil Kurir)'}
                     </button>
                     <button type="button" onclick="printReceipt(${order.id})" class="btn-print" title="Cetak Struk">
                         <i class="fa-solid fa-print"></i>
