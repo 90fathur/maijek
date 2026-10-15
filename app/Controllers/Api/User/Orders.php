@@ -397,6 +397,8 @@ class Orders extends ResourceController
             $order['estimated_time'] = "$estMins mnt (Tiba ~$clockArr)";
         }
 
+        $this->enrichUserTitipOrder($order);
+
         return $this->respond([
             'status' => 200,
             'message' => 'Pesanan aktif ditemukan',
@@ -574,6 +576,8 @@ class Orders extends ResourceController
             $order['estimated_time'] = "$estMins mnt (Tiba ~$clockArr)";
         }
 
+        $this->enrichUserTitipOrder($order);
+
         return $this->respond(['status' => 200, 'message' => 'Detail pesanan', 'data' => $order]);
     }
 
@@ -725,5 +729,55 @@ class Orders extends ResourceController
             if ($intersect) $inside = !$inside;
         }
         return $inside;
+    }
+
+    private function enrichUserTitipOrder(&$order)
+    {
+        $sType = strtolower($order['service_type'] ?? 'motor');
+        $isTitip = strpos($sType, 'titip') !== false;
+        if (!$isTitip) return;
+
+        $order['is_titip'] = true;
+        $titipCost = !empty($order['titip_total_cost']) ? (float)$order['titip_total_cost'] : (float)($order['titip_item_price'] ?? 0);
+        $order['titip_spending_cost'] = $titipCost;
+        $order['cash_to_pay_driver'] = ($order['payment_method'] === 'cash')
+            ? ((float)$order['price'] + $titipCost)
+            : $titipCost;
+
+        if (!empty($order['titip_receipt_img']) && strpos($order['titip_receipt_img'], 'http') !== 0) {
+            $order['titip_receipt_img_url'] = base_url($order['titip_receipt_img']);
+        } else {
+            $order['titip_receipt_img_url'] = !empty($order['titip_receipt_img']) ? $order['titip_receipt_img'] : null;
+        }
+
+        if (!empty($order['proof_of_pickup']) && strpos($order['proof_of_pickup'], 'http') !== 0) {
+            $order['proof_of_pickup_url'] = base_url($order['proof_of_pickup']);
+        }
+        if (!empty($order['proof_of_delivery']) && strpos($order['proof_of_delivery'], 'http') !== 0) {
+            $order['proof_of_delivery_url'] = base_url($order['proof_of_delivery']);
+        }
+
+        $st = $order['status'] ?? 'pending';
+        if ($st === 'pending') {
+            $order['titip_status_title'] = 'Mencari Driver Mai-Titip...';
+            $order['titip_status_desc'] = 'Menghubungkan ke driver terdekat untuk berbelanja.';
+            $order['titip_step'] = 1;
+        } elseif ($st === 'accepted') {
+            $order['titip_status_title'] = 'Driver Menuju Lokasi Belanja 🏪';
+            $order['titip_status_desc'] = 'Driver sedang menuju toko/lokasi belanja untuk membelikan barang Anda.';
+            $order['titip_step'] = 2;
+        } elseif ($st === 'arrived') {
+            $order['titip_status_title'] = 'Driver Sedang Berbelanja 🛍️';
+            $order['titip_status_desc'] = 'Driver telah tiba di toko dan sedang menyiapkan pesanan belanja Anda.';
+            $order['titip_step'] = 3;
+        } elseif ($st === 'in_progress') {
+            $order['titip_status_title'] = 'Belanja Selesai! Sedang Diantar 🛵';
+            $order['titip_status_desc'] = 'Driver telah selesai berbelanja dan sedang mengantarkan belanjaan ke alamat Anda.';
+            $order['titip_step'] = 4;
+        } elseif ($st === 'completed') {
+            $order['titip_status_title'] = 'Pesanan Belanja Selesai 🎉';
+            $order['titip_status_desc'] = 'Belanjaan telah diterima dengan baik.';
+            $order['titip_step'] = 5;
+        }
     }
 }
