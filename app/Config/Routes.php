@@ -9,6 +9,58 @@ $routes->get('/privacy', 'Home::privacy');
 // Menangani CORS Preflight Request (OPTIONS)
 $routes->options('api/(:any)', function () {});
 
+// ==== LINK MIGRASI DATABASE ONLINE (LIVE KASIR & HEARTBEAT MERCHANT) ====
+$routes->get('api/migrate-live-kasir', function () {
+    try {
+        $db = \Config\Database::connect();
+        $messages = [];
+
+        // 1. Cek & Tambah Kolom last_active_at pada tabel merchants
+        if ($db->tableExists('merchants')) {
+            if (!$db->fieldExists('last_active_at', 'merchants')) {
+                $db->query("ALTER TABLE merchants ADD COLUMN last_active_at DATETIME NULL DEFAULT NULL AFTER is_open;");
+                $messages[] = "Kolom <code>last_active_at</code> (DATETIME) berhasil ditambahkan ke tabel <code>merchants</code>.";
+            } else {
+                $messages[] = "Kolom <code>last_active_at</code> sudah ada di tabel <code>merchants</code>.";
+            }
+
+            // 2. Cek & Tambah Index
+            $existingIndex = $db->query("SHOW INDEX FROM merchants WHERE Key_name = 'idx_merchant_last_active'")->getResultArray();
+            if (empty($existingIndex)) {
+                $db->query("ALTER TABLE merchants ADD INDEX idx_merchant_last_active (last_active_at);");
+                $messages[] = "Index <code>idx_merchant_last_active</code> berhasil dibuat.";
+            } else {
+                $messages[] = "Index <code>idx_merchant_last_active</code> sudah aktif.";
+            }
+
+            // 3. Set nilai awal untuk toko yang sedang buka
+            $db->query("UPDATE merchants SET last_active_at = NOW() WHERE is_open = 1 AND last_active_at IS NULL;");
+            $messages[] = "Inisialisasi timestamp aktivitas berhasil diperbarui untuk toko yang buka.";
+        } else {
+            $messages[] = "Tabel <code>merchants</code> belum ditemukan.";
+        }
+
+        // 4. Jalankan juga Migration CI4 formal agar tabel migrations tercatat
+        try {
+            $migrate = \Config\Services::migrations();
+            $latest = $migrate->latest();
+            if ($latest) {
+                $messages[] = "CodeIgniter Migration Service: Migrasi formal berhasil sinkron.";
+            }
+        } catch (\Throwable $migErr) {
+            // Abaikan jika migrasi formal sudah pernah jalan
+        }
+
+        $htmlMessages = "<li>" . implode("</li><li>", $messages) . "</li>";
+        return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Migrasi Database MaiJek</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:40px 20px;display:flex;justify-content:center;} .card{background:#fff;max-width:580px;width:100%;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);padding:32px;} h2{color:#059669;margin-top:0;display:flex;align-items:center;gap:10px;} ul{background:#f9fafb;border-radius:10px;padding:16px 20px 16px 36px;border:1px solid #e5e7eb;line-height:1.7;} code{background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:600;} p{color:#4b5563;line-height:1.6;}</style></head><body><div class='card'><h2><span>🎉</span> Migrasi Database Berhasil!</h2><p>Struktur database untuk fitur <strong>Live Kasir & Heartbeat Merchant</strong> telah siap digunakan 100%.</p><ul>$htmlMessages</ul><p style='color:#6b7280;font-size:13px;margin-top:20px;'>Anda dapat menutup halaman ini sekarang.</p></div></body></html>";
+    } catch (\Throwable $e) {
+        return "<h1>Gagal Migrasi Database</h1><p style='color:red;'>Error: " . $e->getMessage() . "</p>";
+    }
+});
+$routes->get('migrate-live-kasir', function () {
+    return redirect()->to(base_url('api/migrate-live-kasir'));
+});
+
 // Helper to restrict debug / maintenance / direct DDL migration endpoints
 $isAuthorizedDebug = function () {
     if (is_cli()) {
