@@ -189,8 +189,8 @@ class Orders extends ResourceController
             ['type' => $isMart ? 'mart_status_update' : 'food_status_update', 'order_id' => $orderId, 'status' => $status, 'cancel_reason' => $updateData['cancel_reason'] ?? '']
         );
 
-        // Broadcast ke Driver terdekat (Radius 15 KM) jika status 'ready'
-        if ($status == 'ready') {
+        // Broadcast ke Driver terdekat (Radius 15 KM) saat merchant menerima pesanan ('processing') atau saat 'ready'
+        if ($status == 'processing' || $status == 'ready' || $status == 'accepted_by_merchant') {
             $merchant = $db->table('merchants')->where('id', $order['merchant_id'])->get()->getRow();
 
             if ($merchant && $merchant->latitude != null && $merchant->longitude != null) {
@@ -242,12 +242,19 @@ class Orders extends ResourceController
                 try {
                     foreach ($nearbyDrivers as $driver) {
                         if (!empty($driver->fcm_token)) {
+                            $distText = round($driver->distance, 1) . ' KM';
+                            $driverBody = ($status == 'processing' || $status == 'accepted_by_merchant')
+                                ? ($isMart
+                                    ? "Toko {$merchant->name} ($distText) sedang menyiapkan belanjaan. Ambil sekarang!"
+                                    : "Resto {$merchant->name} ($distText) sedang menyiapkan pesanan. Ambil sekarang!")
+                                : ($isMart
+                                    ? "Ada pesanan belanja siap diantar dari toko berjarak $distText."
+                                    : "Ada pesanan makanan siap diantar dari restoran berjarak $distText.");
+
                             $fcmService->sendPushNotification(
                                 $driver->fcm_token,
                                 ($isMart ? "Order MaiMart (" : "Order MaiFood (") . $vehicleLabel . ")!",
-                                $isMart 
-                                    ? "Ada pesanan belanja siap diantar dari toko berjarak " . round($driver->distance, 1) . " KM." 
-                                    : "Ada pesanan makanan siap diantar dari restoran berjarak " . round($driver->distance, 1) . " KM.",
+                                $driverBody,
                                 ['type' => $isMart ? 'new_mart_order' : 'new_food_order', 'order_id' => $orderId, 'vehicle_type' => $targetVehicle]
                             );
                         }

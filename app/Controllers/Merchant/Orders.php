@@ -138,8 +138,8 @@ class Orders extends BaseController
             'cancel_reason' => $updateData['cancel_reason'] ?? ''
         ]);
 
-        // 2. Broadcast ke Driver jika status 'ready'
-        if ($status == 'ready') {
+        // 2. Broadcast ke Driver jika status 'processing' (merchant menerima & memasak) atau 'ready'
+        if ($status == 'processing' || $status == 'ready' || $status == 'accepted_by_merchant') {
             if ($merchant && $merchant->latitude && $merchant->longitude) {
                 $pickupLat = $merchant->latitude;
                 $pickupLng = $merchant->longitude;
@@ -155,15 +155,19 @@ class Orders extends BaseController
                 } else {
                     $builder->whereIn('vehicle_type', ['motor', 'Motor', 'MOTOR']);
                 }
-                $builder->having('distance <=', 10);
+                $builder->having('distance <=', 15);
                 $builder->orderBy('distance', 'ASC');
                 $drivers = $builder->get()->getResultArray();
 
                 foreach ($drivers as $d) {
+                    $driverBody = ($status == 'processing' || $status == 'accepted_by_merchant')
+                        ? ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' sedang menyiapkan pesanan. Ketuk untuk ambil order sekarang!'
+                        : ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' telah menyiapkan pesanan. Ketuk untuk ambil order!';
+
                     $fcmService->sendPushNotification(
                         $d['fcm_token'],
-                        ($isMart ? 'Pesanan Belanja Siap Diantar (' : 'Pesanan Makanan Siap Diantar (') . ($targetVehicle == 'mobil' ? 'Mobil 🚗' : 'Motor 🛵') . ')!',
-                        ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' telah menyiapkan pesanan. Ketuk untuk ambil order!',
+                        ($isMart ? 'Pesanan Belanja (' : 'Pesanan Makanan (') . ($targetVehicle == 'mobil' ? 'Mobil 🚗' : 'Motor 🛵') . ')!',
+                        $driverBody,
                         [
                             'type'         => 'new_order',
                             'order_type'   => $isMart ? 'mart' : 'food',

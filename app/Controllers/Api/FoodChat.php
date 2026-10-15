@@ -36,6 +36,24 @@ class FoodChat extends ResourceController
         $chatModel = new FoodChatModel();
         $messages = $chatModel->where('food_order_id', $orderId)->orderBy('created_at', 'ASC')->findAll();
 
+        $user = $db->table('users')->where('id', $order->user_id)->get()->getRow();
+        $merchant = $db->table('merchants')->where('id', $order->merchant_id)->get()->getRow();
+        $driver = !empty($order->driver_id) ? $db->table('drivers')->where('id', $order->driver_id)->get()->getRow() : null;
+
+        foreach ($messages as &$msg) {
+            $sType = $msg['sender_type'] ?? '';
+            if ($sType === 'merchant') {
+                $msg['sender_name'] = $merchant ? $merchant->name : 'Restoran / Toko';
+                $msg['sender_role_label'] = 'Resto / Toko';
+            } elseif ($sType === 'driver') {
+                $msg['sender_name'] = $driver ? $driver->name : 'Kurir';
+                $msg['sender_role_label'] = 'Kurir Pengantar';
+            } else {
+                $msg['sender_name'] = $user ? $user->name : 'Pelanggan';
+                $msg['sender_role_label'] = 'Pelanggan';
+            }
+        }
+
         return $this->respond([
             'status' => 200,
             'message' => 'Pesan Chat Food',
@@ -85,38 +103,39 @@ class FoodChat extends ResourceController
         ]);
 
         // Kirim notifikasi FCM ke pihak lainnya (Supir -> Penumpang & Merchant, dsb)
-        $db = \Config\Database::connect();
-        $order = $db->table('food_orders')->where('id', $orderId)->get()->getRow();
-        if ($order) {
-            $fcmService = new FcmService();
-            $title = "Pesan Baru (MaiFood)";
-            $fcmPayload = ['type' => 'food_chat', 'order_id' => $orderId];
+        $merchant = $db->table('merchants')->where('id', $order->merchant_id)->get()->getRow();
+        $user = $db->table('users')->where('id', $order->user_id)->get()->getRow();
+        $driver = !empty($order->driver_id) ? $db->table('drivers')->where('id', $order->driver_id)->get()->getRow() : null;
 
-            if ($role == 'user') {
-                // User ngirim ke Merchant & Driver
-                $merchant = $db->table('merchants')->where('id', $order->merchant_id)->get()->getRow();
-                if ($merchant && !empty($merchant->fcm_token)) $fcmService->sendPushNotification($merchant->fcm_token, $title, "Penumpang: $message", $fcmPayload);
+        $fcmService = new FcmService();
+        $fcmPayload = ['type' => 'food_chat', 'order_id' => (string)$orderId, 'sender_type' => $role];
 
-                if ($order->driver_id) {
-                    $driver = $db->table('drivers')->where('id', $order->driver_id)->get()->getRow();
-                    if ($driver && !empty($driver->fcm_token)) $fcmService->sendPushNotification($driver->fcm_token, $title, "Penumpang: $message", $fcmPayload);
-                }
-            } else if ($role == 'merchant') {
-                // Merchant ngirim ke User & Driver
-                $user = $db->table('users')->where('id', $order->user_id)->get()->getRow();
-                if ($user && !empty($user->fcm_token)) $fcmService->sendPushNotification($user->fcm_token, $title, "Restoran: $message", $fcmPayload);
-
-                if ($order->driver_id) {
-                    $driver = $db->table('drivers')->where('id', $order->driver_id)->get()->getRow();
-                    if ($driver && !empty($driver->fcm_token)) $fcmService->sendPushNotification($driver->fcm_token, $title, "Restoran: $message", $fcmPayload);
-                }
-            } else if ($role == 'driver') {
-                // Driver ngirim ke User & Merchant
-                $user = $db->table('users')->where('id', $order->user_id)->get()->getRow();
-                if ($user && !empty($user->fcm_token)) $fcmService->sendPushNotification($user->fcm_token, $title, "Driver: $message", $fcmPayload);
-
-                $merchant = $db->table('merchants')->where('id', $order->merchant_id)->get()->getRow();
-                if ($merchant && !empty($merchant->fcm_token)) $fcmService->sendPushNotification($merchant->fcm_token, $title, "Driver: $message", $fcmPayload);
+        if ($role === 'user') {
+            $senderName = $user ? $user->name : 'Pelanggan';
+            $title = "Pesan dari {$senderName}";
+            if ($merchant && !empty($merchant->fcm_token)) {
+                $fcmService->sendPushNotification($merchant->fcm_token, $title, $message, $fcmPayload);
+            }
+            if ($driver && !empty($driver->fcm_token)) {
+                $fcmService->sendPushNotification($driver->fcm_token, $title, $message, $fcmPayload);
+            }
+        } elseif ($role === 'merchant') {
+            $senderName = $merchant ? $merchant->name : 'Restoran';
+            $title = "Pesan dari {$senderName}";
+            if ($user && !empty($user->fcm_token)) {
+                $fcmService->sendPushNotification($user->fcm_token, $title, $message, $fcmPayload);
+            }
+            if ($driver && !empty($driver->fcm_token)) {
+                $fcmService->sendPushNotification($driver->fcm_token, $title, $message, $fcmPayload);
+            }
+        } elseif ($role === 'driver') {
+            $senderName = $driver ? $driver->name : 'Kurir';
+            $title = "Pesan dari Driver {$senderName}";
+            if ($user && !empty($user->fcm_token)) {
+                $fcmService->sendPushNotification($user->fcm_token, $title, $message, $fcmPayload);
+            }
+            if ($merchant && !empty($merchant->fcm_token)) {
+                $fcmService->sendPushNotification($merchant->fcm_token, $title, $message, $fcmPayload);
             }
         }
 

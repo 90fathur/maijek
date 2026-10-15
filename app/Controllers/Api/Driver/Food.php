@@ -37,12 +37,12 @@ class Food extends ResourceController
         $driver = $driverModel->find($_SERVER['jwt_payload']['uid'] ?? 0);
         $driverVehicleType = strtolower($driver['vehicle_type'] ?? 'motor');
 
-        // Ambil order yang statusnya siap dijemput oleh driver (ready)
+        // Ambil order yang statusnya sedang diproses/siap dijemput oleh driver (processing, accepted_by_merchant, ready)
         $orderBuilder = $orderModel->select('food_orders.*, merchants.name as merchant_name, merchants.address as merchant_address, merchants.latitude as merchant_lat, merchants.longitude as merchant_lng, users.name as user_name, users.phone as user_phone, users.photo as user_photo')
             ->join('merchants', 'merchants.id = food_orders.merchant_id')
             ->join('users', 'users.id = food_orders.user_id')
             ->where('driver_id', null)
-            ->where('food_orders.status', 'ready');
+            ->whereIn('food_orders.status', ['processing', 'accepted_by_merchant', 'ready']);
 
         if (in_array($driverVehicleType, ['mobil', 'car'])) {
             $orderBuilder->whereIn('food_orders.vehicle_type', ['mobil', 'car']);
