@@ -17,6 +17,8 @@ class Orders extends BaseController
 
         $q = trim($this->request->getGet('q') ?? '');
         $status = trim($this->request->getGet('status') ?? '');
+        $startDate = trim($this->request->getGet('start_date') ?? '');
+        $endDate = trim($this->request->getGet('end_date') ?? '');
         $perPage = 15;
 
         $orderModel = new OrderModel();
@@ -48,8 +50,16 @@ class Orders extends BaseController
                 $builder = $builder->groupEnd();
             }
 
-            if ($status !== '' && in_array($status, ['pending', 'processing', 'ready', 'accepted_by_driver', 'in_progress', 'completed', 'cancelled'])) {
+            $allowedFoodStatuses = ['pending', 'accepted_by_merchant', 'processing', 'ready', 'accepted_by_driver', 'driver_assigned', 'driver_at_merchant', 'delivering', 'in_progress', 'completed', 'cancelled'];
+            if ($status !== '' && in_array($status, $allowedFoodStatuses)) {
                 $builder = $builder->where('food_orders.status', $status);
+            }
+
+            if ($startDate !== '') {
+                $builder = $builder->where('food_orders.created_at >=', $startDate . ' 00:00:00');
+            }
+            if ($endDate !== '') {
+                $builder = $builder->where('food_orders.created_at <=', $endDate . ' 23:59:59');
             }
 
             $orders = $builder->orderBy('food_orders.created_at', 'DESC')->paginate($perPage);
@@ -99,8 +109,16 @@ class Orders extends BaseController
                 $builder = $builder->groupEnd();
             }
 
-            if ($status !== '' && in_array($status, ['pending', 'accepted', 'in_progress', 'on_trip', 'completed', 'cancelled'])) {
+            $allowedRideStatuses = ['pending', 'accepted', 'arrived', 'in_progress', 'on_trip', 'completed', 'cancelled'];
+            if ($status !== '' && in_array($status, $allowedRideStatuses)) {
                 $builder = $builder->where('orders.status', $status);
+            }
+
+            if ($startDate !== '') {
+                $builder = $builder->where('orders.created_at >=', $startDate . ' 00:00:00');
+            }
+            if ($endDate !== '') {
+                $builder = $builder->where('orders.created_at <=', $endDate . ' 23:59:59');
             }
 
             $orders = $builder->orderBy('orders.created_at', 'DESC')->paginate($perPage);
@@ -114,6 +132,8 @@ class Orders extends BaseController
             'perPage'    => $perPage,
             'q'          => $q,
             'status'     => $status,
+            'startDate'  => $startDate,
+            'endDate'    => $endDate,
             'tab'        => $tab,
             'totalRide'  => $totalRide,
             'totalFood'  => $totalFood,

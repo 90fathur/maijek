@@ -77,23 +77,35 @@ class Dashboard extends BaseController
 
         $total_gross_revenue = $orderRevenue + $foodRevenue;
         $total_net_revenue = $netOrderRevenue + $netFoodRevenue;
+        $orderDate = trim($this->request->getGet('order_date') ?? '');
+
         // Merge recent orders with Customer, Driver, and Merchant/Food details
-        $recentNormalOrders = $db->table('orders')
-            ->select('orders.id, orders.created_at, orders.status, orders.price, orders.service_type, orders.pickup_address, orders.dropoff_address, orders.item_description, orders.user_id, orders.driver_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate')
+        $normalBuilder = $db->table('orders')
+            ->select('orders.id, orders.created_at, orders.status, orders.cancel_reason, orders.payment_method, orders.price, orders.service_type, orders.pickup_address, orders.dropoff_address, orders.item_description, orders.user_id, orders.driver_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate')
             ->join('users', 'users.id = orders.user_id', 'left')
-            ->join('drivers', 'drivers.id = orders.driver_id', 'left')
-            ->orderBy('orders.created_at', 'DESC')
-            ->limit(8)
+            ->join('drivers', 'drivers.id = orders.driver_id', 'left');
+
+        if (!empty($orderDate)) {
+            $normalBuilder->where('DATE(orders.created_at)', $orderDate);
+        }
+
+        $recentNormalOrders = $normalBuilder->orderBy('orders.created_at', 'DESC')
+            ->limit(!empty($orderDate) ? 50 : 12)
             ->get()
             ->getResultArray();
 
-        $recentFoodOrders = $db->table('food_orders')
-            ->select('food_orders.id, food_orders.created_at, food_orders.status, food_orders.total_price as price, food_orders.order_type, food_orders.delivery_address, food_orders.user_id, food_orders.driver_id, food_orders.merchant_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate, merchants.name as merchant_name')
+        $foodBuilder = $db->table('food_orders')
+            ->select('food_orders.id, food_orders.created_at, food_orders.status, food_orders.cancel_reason, food_orders.payment_method, food_orders.total_price as price, food_orders.order_type, food_orders.delivery_address, food_orders.user_id, food_orders.driver_id, food_orders.merchant_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate, merchants.name as merchant_name')
             ->join('users', 'users.id = food_orders.user_id', 'left')
             ->join('drivers', 'drivers.id = food_orders.driver_id', 'left')
-            ->join('merchants', 'merchants.id = food_orders.merchant_id', 'left')
-            ->orderBy('food_orders.created_at', 'DESC')
-            ->limit(8)
+            ->join('merchants', 'merchants.id = food_orders.merchant_id', 'left');
+
+        if (!empty($orderDate)) {
+            $foodBuilder->where('DATE(food_orders.created_at)', $orderDate);
+        }
+
+        $recentFoodOrders = $foodBuilder->orderBy('food_orders.created_at', 'DESC')
+            ->limit(!empty($orderDate) ? 50 : 12)
             ->get()
             ->getResultArray();
 
@@ -139,6 +151,8 @@ class Dashboard extends BaseController
                 'service_label' => $serviceLabel,
                 'created_at'    => $o['created_at'],
                 'status'        => $o['status'],
+                'cancel_reason' => $o['cancel_reason'] ?? null,
+                'payment_method'=> $o['payment_method'] ?? 'cash',
                 'price'         => (float)$o['price'],
                 'user_name'     => !empty($o['user_name']) ? $o['user_name'] : 'Pelanggan #' . $o['user_id'],
                 'user_phone'    => $o['user_phone'] ?? '',
@@ -164,6 +178,8 @@ class Dashboard extends BaseController
                 'service_label' => $orderType,
                 'created_at'    => $fo['created_at'],
                 'status'        => $fo['status'],
+                'cancel_reason' => $fo['cancel_reason'] ?? null,
+                'payment_method'=> $fo['payment_method'] ?? 'cash',
                 'price'         => (float)$fo['price'],
                 'user_name'     => !empty($fo['user_name']) ? $fo['user_name'] : 'Pelanggan #' . $fo['user_id'],
                 'user_phone'    => $fo['user_phone'] ?? '',
@@ -199,7 +215,8 @@ class Dashboard extends BaseController
             'total_orders' => $orderModel->countAllResults() + $foodOrderModel->countAllResults(),
             'total_gross_revenue' => $total_gross_revenue,
             'total_net_revenue' => $total_net_revenue,
-            'recent_orders' => array_slice($mergedOrders, 0, 7),
+            'order_date' => $orderDate,
+            'recent_orders' => !empty($orderDate) ? $mergedOrders : array_slice($mergedOrders, 0, 8),
             'chart_dates' => json_encode($dates),
             'chart_counts' => json_encode($counts),
             'chart_counts_raw' => $counts,
@@ -220,23 +237,31 @@ class Dashboard extends BaseController
         $onlineMotor = $driverModel->where('is_online', 1)->where('status', 'active')->where('last_heartbeat_at >=', $fiveMinsAgo)->groupStart()->where('vehicle_type', 'motor')->orWhere('vehicle_type', null)->orWhere('vehicle_type', '')->groupEnd()->countAllResults();
         $onlineMobil = $driverModel->where('is_online', 1)->where('status', 'active')->where('last_heartbeat_at >=', $fiveMinsAgo)->whereIn('vehicle_type', ['mobil', 'car'])->countAllResults();
 
-        // 7 Pesanan Terakhir
-        $recentNormalOrders = $db->table('orders')
-            ->select('orders.id, orders.created_at, orders.status, orders.price, orders.service_type, orders.pickup_address, orders.dropoff_address, orders.item_description, orders.user_id, orders.driver_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate')
+        $orderDate = trim($this->request->getGet('order_date') ?? '');
+
+        // 8 Pesanan Terakhir
+        $ordersQuery = $db->table('orders')
+            ->select('orders.id, orders.created_at, orders.status, orders.cancel_reason, orders.price, orders.service_type, orders.pickup_address, orders.dropoff_address, orders.item_description, orders.user_id, orders.driver_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate')
             ->join('users', 'users.id = orders.user_id', 'left')
-            ->join('drivers', 'drivers.id = orders.driver_id', 'left')
-            ->orderBy('orders.created_at', 'DESC')
-            ->limit(8)
+            ->join('drivers', 'drivers.id = orders.driver_id', 'left');
+        if (!empty($orderDate)) {
+            $ordersQuery->where('DATE(orders.created_at)', $orderDate);
+        }
+        $recentNormalOrders = $ordersQuery->orderBy('orders.created_at', 'DESC')
+            ->limit(10)
             ->get()
             ->getResultArray();
 
-        $recentFoodOrders = $db->table('food_orders')
-            ->select('food_orders.id, food_orders.created_at, food_orders.status, food_orders.total_price as price, food_orders.order_type, food_orders.user_id, food_orders.driver_id, food_orders.merchant_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate, merchants.name as merchant_name')
+        $foodOrdersQuery = $db->table('food_orders')
+            ->select('food_orders.id, food_orders.created_at, food_orders.status, food_orders.cancel_reason, food_orders.total_price as price, food_orders.order_type, food_orders.user_id, food_orders.driver_id, food_orders.merchant_id, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate, merchants.name as merchant_name')
             ->join('users', 'users.id = food_orders.user_id', 'left')
             ->join('drivers', 'drivers.id = food_orders.driver_id', 'left')
-            ->join('merchants', 'merchants.id = food_orders.merchant_id', 'left')
-            ->orderBy('food_orders.created_at', 'DESC')
-            ->limit(8)
+            ->join('merchants', 'merchants.id = food_orders.merchant_id', 'left');
+        if (!empty($orderDate)) {
+            $foodOrdersQuery->where('DATE(food_orders.created_at)', $orderDate);
+        }
+        $recentFoodOrders = $foodOrdersQuery->orderBy('food_orders.created_at', 'DESC')
+            ->limit(10)
             ->get()
             ->getResultArray();
 
@@ -283,6 +308,7 @@ class Dashboard extends BaseController
                 'created_at'    => $o['created_at'],
                 'created_at_fmt' => date('d M, H:i', strtotime($o['created_at'])),
                 'status'        => $o['status'],
+                'cancel_reason' => $o['cancel_reason'] ?? null,
                 'price'         => (float)$o['price'],
                 'price_fmt'     => 'Rp ' . number_format((float)$o['price'], 0, ',', '.'),
                 'user_name'     => !empty($o['user_name']) ? $o['user_name'] : 'Pelanggan #' . $o['user_id'],
@@ -310,6 +336,7 @@ class Dashboard extends BaseController
                 'created_at'    => $fo['created_at'],
                 'created_at_fmt' => date('d M, H:i', strtotime($fo['created_at'])),
                 'status'        => $fo['status'],
+                'cancel_reason' => $fo['cancel_reason'] ?? null,
                 'price'         => (float)$fo['price'],
                 'price_fmt'     => 'Rp ' . number_format((float)$fo['price'], 0, ',', '.'),
                 'user_name'     => !empty($fo['user_name']) ? $fo['user_name'] : 'Pelanggan #' . $fo['user_id'],

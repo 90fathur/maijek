@@ -6,7 +6,21 @@
         <h1 class="page-title animate-fade" style="margin-bottom: 4px;">Riwayat Pesanan</h1>
         <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0;">Pantau dan kelola seluruh transaksi pesanan transportasi dan pesan-antar makanan/toko.</p>
     </div>
-    <a href="<?= base_url('admin/orders/exportCsv/' . (($tab ?? 'ride') === 'food' ? 'maifood' : 'mairide')) ?>" style="padding: 10px 18px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">
+    <?php
+    $exportParams = [];
+    if (!empty($startDate)) $exportParams['start_date'] = $startDate;
+    if (!empty($endDate)) $exportParams['end_date'] = $endDate;
+    $exportUrl = base_url('admin/orders/exportCsv/' . (($tab ?? 'ride') === 'food' ? 'maifood' : 'mairide')) . (!empty($exportParams) ? '?' . http_build_query($exportParams) : '');
+
+    $urlParamsRide = ['tab' => 'ride'];
+    if (!empty($startDate)) $urlParamsRide['start_date'] = $startDate;
+    if (!empty($endDate)) $urlParamsRide['end_date'] = $endDate;
+
+    $urlParamsFood = ['tab' => 'food'];
+    if (!empty($startDate)) $urlParamsFood['start_date'] = $startDate;
+    if (!empty($endDate)) $urlParamsFood['end_date'] = $endDate;
+    ?>
+    <a href="<?= $exportUrl ?>" style="padding: 10px 18px; background: #10b981; color: white; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">
         <i class="fa-solid fa-file-csv"></i> Export Laporan (<?= ($tab ?? 'ride') === 'food' ? 'MaiFood & Mart' : 'MaiRide & Kirim' ?>)
     </a>
 </div>
@@ -20,7 +34,7 @@
 
 <!-- Navigasi Tab -->
 <div style="display: flex; gap: 12px; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; background: #ffffff; padding: 6px 16px 0; border-radius: 12px 12px 0 0; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-    <a href="<?= base_url('admin/orders?tab=ride') ?>" style="padding: 14px 22px; font-weight: 700; font-size: 0.95rem; text-decoration: none; border-bottom: 3px solid <?= ($tab ?? 'ride') === 'ride' ? 'var(--primary, #10b981)' : 'transparent' ?>; color: <?= ($tab ?? 'ride') === 'ride' ? 'var(--primary, #10b981)' : '#64748b' ?>; display: inline-flex; align-items: center; gap: 10px; margin-bottom: -2px; transition: all 0.2s;">
+    <a href="<?= base_url('admin/orders?' . http_build_query($urlParamsRide)) ?>" style="padding: 14px 22px; font-weight: 700; font-size: 0.95rem; text-decoration: none; border-bottom: 3px solid <?= ($tab ?? 'ride') === 'ride' ? 'var(--primary, #10b981)' : 'transparent' ?>; color: <?= ($tab ?? 'ride') === 'ride' ? 'var(--primary, #10b981)' : '#64748b' ?>; display: inline-flex; align-items: center; gap: 10px; margin-bottom: -2px; transition: all 0.2s;">
         <i class="fa-solid fa-motorcycle" style="font-size: 1.1rem;"></i> 
         <span>MaiRide & Pengantaran</span>
         <span style="background: <?= ($tab ?? 'ride') === 'ride' ? '#d1fae5' : '#f1f5f9' ?>; color: <?= ($tab ?? 'ride') === 'ride' ? '#065f46' : '#64748b' ?>; font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; font-weight: 800;">
@@ -28,7 +42,7 @@
         </span>
     </a>
     
-    <a href="<?= base_url('admin/orders?tab=food') ?>" style="padding: 14px 22px; font-weight: 700; font-size: 0.95rem; text-decoration: none; border-bottom: 3px solid <?= ($tab ?? 'ride') === 'food' ? '#ea580c' : 'transparent' ?>; color: <?= ($tab ?? 'ride') === 'food' ? '#ea580c' : '#64748b' ?>; display: inline-flex; align-items: center; gap: 10px; margin-bottom: -2px; transition: all 0.2s;">
+    <a href="<?= base_url('admin/orders?' . http_build_query($urlParamsFood)) ?>" style="padding: 14px 22px; font-weight: 700; font-size: 0.95rem; text-decoration: none; border-bottom: 3px solid <?= ($tab ?? 'ride') === 'food' ? '#ea580c' : 'transparent' ?>; color: <?= ($tab ?? 'ride') === 'food' ? '#ea580c' : '#64748b' ?>; display: inline-flex; align-items: center; gap: 10px; margin-bottom: -2px; transition: all 0.2s;">
         <i class="fa-solid fa-utensils" style="font-size: 1.1rem;"></i> 
         <span>MaiFood & MaiMart</span>
         <span style="background: <?= ($tab ?? 'ride') === 'food' ? '#ffedd5' : '#f1f5f9' ?>; color: <?= ($tab ?? 'ride') === 'food' ? '#9a3412' : '#64748b' ?>; font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; font-weight: 800;">
@@ -39,51 +53,83 @@
 
 <div class="card-table animate-fade">
     <!-- Toolbar Pencarian & Filter -->
-    <div class="table-toolbar">
-        <form method="get" action="<?= base_url('admin/orders') ?>" class="toolbar-form">
-            <input type="hidden" name="tab" value="<?= esc($tab ?? 'ride') ?>">
-            
-            <div class="search-box">
-                <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                <input type="text" name="q" value="<?= esc($q ?? '') ?>" placeholder="<?= ($tab ?? 'ride') === 'food' ? 'Cari ID pesanan, nama resto/toko, pemesan, kurir, menu...' : 'Cari ID pesanan, nama pemesan, kurir, alamat jemput/tujuan...' ?>" class="search-input">
-                <?php if (!empty($q)): ?>
-                    <a href="<?= base_url('admin/orders?tab=' . esc($tab ?? 'ride')) ?>" class="clear-search" title="Hapus pencarian"><i class="fa-solid fa-xmark"></i></a>
-                <?php endif; ?>
-            </div>
-
-            <div class="filter-box">
-                <select name="status" class="filter-select" onchange="this.form.submit()">
-                    <option value="">Semua Status</option>
-                    <?php if (($tab ?? 'ride') === 'food'): ?>
-                        <option value="completed" <?= ($status ?? '') === 'completed' ? 'selected' : '' ?>>Selesai</option>
-                        <option value="in_progress" <?= ($status ?? '') === 'in_progress' ? 'selected' : '' ?>>Sedang Diantar</option>
-                        <option value="processing" <?= ($status ?? '') === 'processing' ? 'selected' : '' ?>>Sedang Dimasak / Disiapkan</option>
-                        <option value="ready" <?= ($status ?? '') === 'ready' ? 'selected' : '' ?>>Siap Diambil Kurir</option>
-                        <option value="pending" <?= ($status ?? '') === 'pending' ? 'selected' : '' ?>>Menunggu Konfirmasi</option>
-                        <option value="cancelled" <?= ($status ?? '') === 'cancelled' ? 'selected' : '' ?>>Dibatalkan</option>
-                    <?php else: ?>
-                        <option value="completed" <?= ($status ?? '') === 'completed' ? 'selected' : '' ?>>Selesai</option>
-                        <option value="in_progress" <?= ($status ?? '') === 'in_progress' ? 'selected' : '' ?>>Dalam Perjalanan</option>
-                        <option value="accepted" <?= ($status ?? '') === 'accepted' ? 'selected' : '' ?>>Diterima Driver</option>
-                        <option value="pending" <?= ($status ?? '') === 'pending' ? 'selected' : '' ?>>Menunggu Driver</option>
-                        <option value="cancelled" <?= ($status ?? '') === 'cancelled' ? 'selected' : '' ?>>Dibatalkan</option>
+    <div class="table-toolbar" style="flex-direction: column; align-items: stretch; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%;">
+            <form method="get" action="<?= base_url('admin/orders') ?>" class="toolbar-form" id="orderFilterForm" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <input type="hidden" name="tab" value="<?= esc($tab ?? 'ride') ?>">
+                
+                <div class="search-box" style="min-width: 220px;">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" name="q" value="<?= esc($q ?? '') ?>" placeholder="<?= ($tab ?? 'ride') === 'food' ? 'Cari ID, resto, pelanggan, kurir...' : 'Cari ID, pelanggan, kurir, alamat...' ?>" class="search-input">
+                    <?php if (!empty($q)): ?>
+                        <a href="<?= base_url('admin/orders?tab=' . esc($tab ?? 'ride') . (!empty($startDate) ? '&start_date=' . $startDate : '') . (!empty($endDate) ? '&end_date=' . $endDate : '')) ?>" class="clear-search" title="Hapus pencarian"><i class="fa-solid fa-xmark"></i></a>
                     <?php endif; ?>
-                </select>
+                </div>
+
+                <!-- Input Rentang Tanggal -->
+                <div style="display: flex; align-items: center; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 5px 10px; gap: 6px;">
+                    <i class="fa-regular fa-calendar-days" style="color: #64748b; font-size: 0.85rem;"></i>
+                    <input type="date" name="start_date" id="orderStartDate" value="<?= esc($startDate ?? '') ?>" style="border: none; outline: none; background: transparent; font-size: 0.8rem; color: #1e293b;" title="Dari Tanggal">
+                    <span style="color: #94a3b8; font-size: 0.75rem; font-weight: 700;">s/d</span>
+                    <input type="date" name="end_date" id="orderEndDate" value="<?= esc($endDate ?? '') ?>" style="border: none; outline: none; background: transparent; font-size: 0.8rem; color: #1e293b;" title="Sampai Tanggal">
+                </div>
+
+                <div class="filter-box">
+                    <select name="status" class="filter-select" onchange="this.form.submit()">
+                        <option value="">Semua Status</option>
+                        <?php if (($tab ?? 'ride') === 'food'): ?>
+                            <option value="completed" <?= ($status ?? '') === 'completed' ? 'selected' : '' ?>>Selesai</option>
+                            <option value="delivering" <?= ($status ?? '') === 'delivering' ? 'selected' : '' ?>>Sedang Diantar</option>
+                            <option value="driver_assigned" <?= ($status ?? '') === 'driver_assigned' ? 'selected' : '' ?>>Kurir Menuju Resto</option>
+                            <option value="driver_at_merchant" <?= ($status ?? '') === 'driver_at_merchant' ? 'selected' : '' ?>>Kurir di Resto</option>
+                            <option value="ready" <?= ($status ?? '') === 'ready' ? 'selected' : '' ?>>Pesanan Siap</option>
+                            <option value="processing" <?= ($status ?? '') === 'processing' ? 'selected' : '' ?>>Dimasak Resto</option>
+                            <option value="accepted_by_merchant" <?= ($status ?? '') === 'accepted_by_merchant' ? 'selected' : '' ?>>Diterima Resto</option>
+                            <option value="pending" <?= ($status ?? '') === 'pending' ? 'selected' : '' ?>>Menunggu Resto</option>
+                            <option value="cancelled" <?= ($status ?? '') === 'cancelled' ? 'selected' : '' ?>>Dibatalkan</option>
+                        <?php else: ?>
+                            <option value="completed" <?= ($status ?? '') === 'completed' ? 'selected' : '' ?>>Selesai</option>
+                            <option value="in_progress" <?= ($status ?? '') === 'in_progress' ? 'selected' : '' ?>>Dalam Perjalanan</option>
+                            <option value="arrived" <?= ($status ?? '') === 'arrived' ? 'selected' : '' ?>>Driver Sampai</option>
+                            <option value="accepted" <?= ($status ?? '') === 'accepted' ? 'selected' : '' ?>>Diterima Driver</option>
+                            <option value="pending" <?= ($status ?? '') === 'pending' ? 'selected' : '' ?>>Mencari Driver</option>
+                            <option value="cancelled" <?= ($status ?? '') === 'cancelled' ? 'selected' : '' ?>>Dibatalkan</option>
+                        <?php endif; ?>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-search" style="padding: 7px 14px;">
+                    <i class="fa-solid fa-filter"></i> Terapkan
+                </button>
+
+                <?php if (!empty($q) || !empty($status) || !empty($startDate) || !empty($endDate)): ?>
+                    <a href="<?= base_url('admin/orders?tab=' . esc($tab ?? 'ride')) ?>" class="btn-reset" title="Reset filter" style="padding: 7px 12px;">
+                        <i class="fa-solid fa-rotate-left"></i> Reset
+                    </a>
+                <?php endif; ?>
+            </form>
+
+            <div class="toolbar-stats" style="font-size: 0.82rem; color: #64748b;">
+                Ditemukan: <b style="color: var(--primary); font-size: 0.95rem;"><?= number_format($totalCount ?? 0) ?></b> pesanan
             </div>
+        </div>
 
-            <button type="submit" class="btn-search">
-                <i class="fa-solid fa-filter"></i> Filter
-            </button>
+        <!-- Tombol Preset Cepat Filter Tanggal -->
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: #f8fafc; padding: 6px 10px; border-radius: 8px; border: 1px solid #f1f5f9;">
+            <span style="font-size: 0.74rem; font-weight: 700; color: #64748b; margin-right: 4px;">
+                <i class="fa-solid fa-bolt" style="color: #eab308;"></i> Filter Cepat Tanggal:
+            </span>
+            <button type="button" onclick="setDatePreset('today')" style="background: <?= ($startDate === date('Y-m-d') && $endDate === date('Y-m-d')) ? 'var(--primary, #10b981)' : '#ffffff' ?>; color: <?= ($startDate === date('Y-m-d') && $endDate === date('Y-m-d')) ? '#ffffff' : '#334155' ?>; border: 1px solid #cbd5e1; padding: 3px 9px; border-radius: 6px; font-size: 0.73rem; font-weight: 600; cursor: pointer;">Hari Ini</button>
+            <button type="button" onclick="setDatePreset('yesterday')" style="background: <?= ($startDate === date('Y-m-d', strtotime('-1 day')) && $endDate === date('Y-m-d', strtotime('-1 day')) ? 'var(--primary, #10b981)' : '#ffffff') ?>; color: <?= ($startDate === date('Y-m-d', strtotime('-1 day')) && $endDate === date('Y-m-d', strtotime('-1 day')) ? '#ffffff' : '#334155') ?>; border: 1px solid #cbd5e1; padding: 3px 9px; border-radius: 6px; font-size: 0.73rem; font-weight: 600; cursor: pointer;">Kemarin</button>
+            <button type="button" onclick="setDatePreset('7days')" style="background: #ffffff; color: #334155; border: 1px solid #cbd5e1; padding: 3px 9px; border-radius: 6px; font-size: 0.73rem; font-weight: 600; cursor: pointer;">7 Hari Terakhir</button>
+            <button type="button" onclick="setDatePreset('this_month')" style="background: #ffffff; color: #334155; border: 1px solid #cbd5e1; padding: 3px 9px; border-radius: 6px; font-size: 0.73rem; font-weight: 600; cursor: pointer;">Bulan Ini</button>
+            <button type="button" onclick="setDatePreset('all')" style="background: <?= (empty($startDate) && empty($endDate)) ? '#e2e8f0' : '#ffffff' ?>; color: #334155; border: 1px solid #cbd5e1; padding: 3px 9px; border-radius: 6px; font-size: 0.73rem; font-weight: 600; cursor: pointer;">Semua Tanggal</button>
 
-            <?php if (!empty($q) || !empty($status)): ?>
-                <a href="<?= base_url('admin/orders?tab=' . esc($tab ?? 'ride')) ?>" class="btn-reset" title="Reset filter">
-                    <i class="fa-solid fa-rotate-left"></i> Reset
-                </a>
+            <?php if (!empty($startDate) || !empty($endDate)): ?>
+                <span style="margin-left: auto; font-size: 0.72rem; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+                    <i class="fa-regular fa-calendar-check"></i> Filter aktif: <?= esc($startDate ?: 'Awal') ?> s/d <?= esc($endDate ?: 'Sekarang') ?>
+                </span>
             <?php endif; ?>
-        </form>
-
-        <div class="toolbar-stats">
-            Total: <b><?= number_format($totalCount ?? 0) ?></b> Pesanan <?= ($tab ?? 'ride') === 'food' ? 'Food & Mart' : 'Ride & Kirim' ?>
         </div>
     </div>
 
@@ -146,7 +192,20 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <?php if (!empty($order['driver_name'])): ?>
+                                    <?php if ($order['status'] === 'cancelled'): ?>
+                                        <?php if (!empty($order['driver_name'])): ?>
+                                            <div style="color: #64748b; font-size: 0.82rem; text-decoration: line-through;">
+                                                <i class="fa-solid fa-motorcycle"></i> <?= esc($order['driver_name']) ?>
+                                            </div>
+                                            <span style="font-size: 0.72rem; color: #dc2626; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; margin-top: 2px;">
+                                                <i class="fa-solid fa-ban"></i> Batal
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="font-size: 0.73rem; color: #dc2626; font-weight: 600; background: #fee2e2; border: 1px solid #fecaca; padding: 2px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                                                <i class="fa-solid fa-ban"></i> Tidak Ada Kurir (Batal)
+                                            </span>
+                                        <?php endif; ?>
+                                    <?php elseif (!empty($order['driver_name'])): ?>
                                         <strong style="color: #047857; display: flex; align-items: center; gap: 4px;">
                                             <i class="fa-solid fa-motorcycle" style="font-size: 0.8rem;"></i> <?= esc($order['driver_name']) ?>
                                         </strong>
@@ -188,21 +247,31 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <?php if ($order['status'] == 'completed'): ?>
-                                        <span class="badge badge-success">Selesai</span>
-                                    <?php elseif ($order['status'] == 'cancelled'): ?>
-                                        <span class="badge badge-danger">Batal</span>
-                                        <?php if (!empty($order['cancel_reason'])): ?>
-                                            <div style="font-size: 0.72rem; color: #ef4444; margin-top: 3px; font-style: italic;">
-                                                "<?= esc($order['cancel_reason']) ?>"
-                                            </div>
-                                        <?php endif; ?>
-                                    <?php elseif (in_array($order['status'], ['in_progress', 'accepted_by_driver'])): ?>
-                                        <span class="badge" style="background: #e0f2fe; color: #0284c7;">Diantar</span>
-                                    <?php elseif (in_array($order['status'], ['processing', 'ready'])): ?>
-                                        <span class="badge badge-warning">Dimasak</span>
-                                    <?php else: ?>
-                                        <span class="badge" style="background: #fef3c7; color: #92400e;">Menunggu</span>
+                                    <?php
+                                    $st = strtolower($order['status'] ?? 'pending');
+                                    $statusBadgeMapFood = [
+                                        'completed'            => ['label' => 'Selesai', 'bg' => '#dcfce7', 'color' => '#166534', 'border' => '#86efac'],
+                                        'delivered'            => ['label' => 'Selesai', 'bg' => '#dcfce7', 'color' => '#166534', 'border' => '#86efac'],
+                                        'cancelled'            => ['label' => 'Batal', 'bg' => '#fee2e2', 'color' => '#dc2626', 'border' => '#fca5a5'],
+                                        'delivering'           => ['label' => 'Sedang Diantar', 'bg' => '#e0f2fe', 'color' => '#0369a1', 'border' => '#bae6fd'],
+                                        'in_progress'          => ['label' => 'Sedang Diantar', 'bg' => '#e0f2fe', 'color' => '#0369a1', 'border' => '#bae6fd'],
+                                        'driver_at_merchant'   => ['label' => 'Kurir di Resto', 'bg' => '#ede9fe', 'color' => '#6d28d9', 'border' => '#ddd6fe'],
+                                        'driver_assigned'      => ['label' => 'Kurir Menuju Resto', 'bg' => '#eff6ff', 'color' => '#1d4ed8', 'border' => '#bfdbfe'],
+                                        'accepted_by_driver'   => ['label' => 'Kurir Menuju Resto', 'bg' => '#eff6ff', 'color' => '#1d4ed8', 'border' => '#bfdbfe'],
+                                        'ready'                => ['label' => 'Pesanan Siap', 'bg' => '#ccfbf1', 'color' => '#0f766e', 'border' => '#99f6e4'],
+                                        'processing'           => ['label' => 'Dimasak Resto', 'bg' => '#ffedd5', 'color' => '#c2410c', 'border' => '#fed7aa'],
+                                        'accepted_by_merchant' => ['label' => 'Diterima Resto', 'bg' => '#fef3c7', 'color' => '#b45309', 'border' => '#fde68a'],
+                                        'pending'              => ['label' => 'Menunggu Resto', 'bg' => '#fff7ed', 'color' => '#c2410c', 'border' => '#ffedd5'],
+                                    ];
+                                    $stFood = $statusBadgeMapFood[$st] ?? ['label' => ucfirst($st), 'bg' => '#f1f5f9', 'color' => '#475569', 'border' => '#cbd5e1'];
+                                    ?>
+                                    <span class="badge" style="background: <?= $stFood['bg'] ?>; color: <?= $stFood['color'] ?>; border: 1px solid <?= $stFood['border'] ?>; font-size: 0.74rem; padding: 3px 8px; font-weight: 700; border-radius: 6px;">
+                                        <?= esc($stFood['label']) ?>
+                                    </span>
+                                    <?php if ($st === 'cancelled' && !empty($order['cancel_reason'])): ?>
+                                        <div style="font-size: 0.72rem; color: #b91c1c; margin-top: 4px; background: #fef2f2; padding: 3px 6px; border-radius: 4px; border: 1px solid #fee2e2; line-height: 1.3;">
+                                            <i class="fa-solid fa-circle-exclamation" style="color: #ef4444;"></i> <?= esc($order['cancel_reason']) ?>
+                                        </div>
                                     <?php endif; ?>
                                 </td>
                                 <td style="text-align: center; white-space: nowrap;">
@@ -290,7 +359,20 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <?php if (!empty($order['driver_name'])): ?>
+                                    <?php if ($order['status'] === 'cancelled'): ?>
+                                        <?php if (!empty($order['driver_name'])): ?>
+                                            <div style="color: #64748b; font-size: 0.82rem; text-decoration: line-through;">
+                                                <i class="fa-solid fa-motorcycle"></i> <?= esc($order['driver_name']) ?>
+                                            </div>
+                                            <span style="font-size: 0.72rem; color: #dc2626; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; margin-top: 2px;">
+                                                <i class="fa-solid fa-ban"></i> Batal
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="font-size: 0.73rem; color: #dc2626; font-weight: 600; background: #fee2e2; border: 1px solid #fecaca; padding: 2px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                                                <i class="fa-solid fa-ban"></i> Tidak Ada Driver (Batal)
+                                            </span>
+                                        <?php endif; ?>
+                                    <?php elseif (!empty($order['driver_name'])): ?>
                                         <strong style="color: #047857; display: flex; align-items: center; gap: 4px;">
                                             <i class="fa-solid fa-motorcycle" style="font-size: 0.8rem;"></i> <?= esc($order['driver_name']) ?>
                                         </strong>
@@ -362,19 +444,26 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <?php if ($order['status'] == 'completed'): ?>
-                                        <span class="badge badge-success">Selesai</span>
-                                    <?php elseif ($order['status'] == 'pending'): ?>
-                                        <span class="badge badge-warning">Menunggu</span>
-                                    <?php elseif ($order['status'] == 'cancelled'): ?>
-                                        <span class="badge badge-danger">Dibatalkan</span>
-                                        <?php if (!empty($order['cancel_reason'])): ?>
-                                            <div style="font-size: 0.72rem; color: #ef4444; margin-top: 3px; font-style: italic;">
-                                                "<?= esc($order['cancel_reason']) ?>"
-                                            </div>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <span class="badge" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;">Jalan</span>
+                                    <?php
+                                    $st = strtolower($order['status'] ?? 'pending');
+                                    $statusBadgeMapRide = [
+                                        'completed'   => ['label' => 'Selesai', 'bg' => '#dcfce7', 'color' => '#166534', 'border' => '#86efac'],
+                                        'cancelled'   => ['label' => 'Batal', 'bg' => '#fee2e2', 'color' => '#dc2626', 'border' => '#fca5a5'],
+                                        'in_progress' => ['label' => 'Dalam Perjalanan', 'bg' => '#e0f2fe', 'color' => '#0369a1', 'border' => '#bae6fd'],
+                                        'on_trip'     => ['label' => 'Dalam Perjalanan', 'bg' => '#e0f2fe', 'color' => '#0369a1', 'border' => '#bae6fd'],
+                                        'arrived'     => ['label' => 'Driver Sampai', 'bg' => '#ede9fe', 'color' => '#6d28d9', 'border' => '#ddd6fe'],
+                                        'accepted'    => ['label' => 'Diterima Driver', 'bg' => '#eff6ff', 'color' => '#1d4ed8', 'border' => '#bfdbfe'],
+                                        'pending'     => ['label' => 'Mencari Driver', 'bg' => '#fff7ed', 'color' => '#c2410c', 'border' => '#ffedd5'],
+                                    ];
+                                    $stRide = $statusBadgeMapRide[$st] ?? ['label' => ucfirst($st), 'bg' => '#f1f5f9', 'color' => '#475569', 'border' => '#cbd5e1'];
+                                    ?>
+                                    <span class="badge" style="background: <?= $stRide['bg'] ?>; color: <?= $stRide['color'] ?>; border: 1px solid <?= $stRide['border'] ?>; font-size: 0.74rem; padding: 3px 8px; font-weight: 700; border-radius: 6px;">
+                                        <?= esc($stRide['label']) ?>
+                                    </span>
+                                    <?php if ($st === 'cancelled' && !empty($order['cancel_reason'])): ?>
+                                        <div style="font-size: 0.72rem; color: #b91c1c; margin-top: 4px; background: #fef2f2; padding: 3px 6px; border-radius: 4px; border: 1px solid #fee2e2; line-height: 1.3;">
+                                            <i class="fa-solid fa-circle-exclamation" style="color: #ef4444;"></i> <?= esc($order['cancel_reason']) ?>
+                                        </div>
                                     <?php endif; ?>
                                 </td>
                                 <td style="text-align: center; white-space: nowrap;">
@@ -423,4 +512,47 @@
 </div>
 
 <?= $this->include('admin/orders/modal_detail') ?>
+
+<script>
+function setDatePreset(preset) {
+    const startInput = document.getElementById('orderStartDate');
+    const endInput = document.getElementById('orderEndDate');
+    const form = document.getElementById('orderFilterForm');
+    if (!startInput || !endInput || !form) return;
+
+    const today = new Date();
+    const formatDate = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'today') {
+        const dStr = formatDate(today);
+        startInput.value = dStr;
+        endInput.value = dStr;
+    } else if (preset === 'yesterday') {
+        const y = new Date();
+        y.setDate(today.getDate() - 1);
+        const yStr = formatDate(y);
+        startInput.value = yStr;
+        endInput.value = yStr;
+    } else if (preset === '7days') {
+        const past = new Date();
+        past.setDate(today.getDate() - 6);
+        startInput.value = formatDate(past);
+        endInput.value = formatDate(today);
+    } else if (preset === 'this_month') {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        startInput.value = formatDate(firstDay);
+        endInput.value = formatDate(lastDay);
+    } else if (preset === 'all') {
+        startInput.value = '';
+        endInput.value = '';
+    }
+    form.submit();
+}
+</script>
 <?= $this->endSection() ?>
