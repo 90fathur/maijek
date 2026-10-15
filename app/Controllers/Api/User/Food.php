@@ -1044,21 +1044,31 @@ class Food extends ResourceController
             return $this->respond(['status' => 400, 'message' => 'Pesanan ini sudah dibatalkan sebelumnya.'], 400);
         }
 
-        if ($order['status'] === 'completed' || $order['status'] === 'delivered') {
-            return $this->respond(['status' => 400, 'message' => 'Pesanan sudah selesai dan tidak dapat dibatalkan.'], 400);
-        }
-
-        if ($order['status'] === 'delivering' || $order['status'] === 'in_progress') {
-            return $this->respond(['status' => 400, 'message' => 'Pesanan sedang diantar oleh kurir ke lokasi Anda dan tidak dapat dibatalkan.'], 400);
+        if ($order['status'] !== 'pending') {
+            $isMart = ($order['order_type'] ?? '') === 'mart';
+            $merchantLabel = $isMart ? 'toko' : 'restoran';
+            return $this->respond([
+                'status' => 400,
+                'message' => "Pesanan sudah dikonfirmasi oleh {$merchantLabel} dan sedang diproses, sehingga tidak dapat dibatalkan."
+            ], 400);
         }
 
         $db = \Config\Database::connect();
         $db->transStart();
 
-        $orderModel->update($orderId, [
-            'status' => 'cancelled',
-            'cancel_reason' => $reason
-        ]);
+        $affected = $db->table('food_orders')
+            ->where('id', $orderId)
+            ->where('user_id', $payload['uid'])
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'cancelled',
+                'cancel_reason' => $reason
+            ]);
+
+        if (!$affected) {
+            $db->transRollback();
+            return $this->respond(['status' => 400, 'message' => 'Pesanan tidak dapat dibatalkan atau sudah diproses oleh restoran.'], 400);
+        }
 
         // REFUND SALDO MAI-PAY 100% SECARA ATOMIK
         if ($order['payment_method'] === 'maipay' && (float)$order['total_price'] > 0) {
