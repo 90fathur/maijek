@@ -32,7 +32,9 @@ class FoodOrderModel extends Model
         'review_driver',
         'in_progress_at',
         'completed_at',
-        'cancel_reason'
+        'cancel_reason',
+        'priority_dispatched_at',
+        'fallback_dispatched_at'
     ];
     protected $useTimestamps = true;
 }

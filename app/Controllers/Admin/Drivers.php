@@ -40,21 +40,75 @@ class Drivers extends BaseController
             $builder = $builder->where('vehicle_type', $vehicleType);
         }
 
+        $isPriority = trim($this->request->getGet('is_priority') ?? '');
+        if ($isPriority === '1') {
+            $builder = $builder->where('is_priority', 1);
+        }
+
         $drivers = $builder->orderBy('created_at', 'DESC')->paginate($perPage);
         $pager = $driverModel->pager;
 
+        $db = \Config\Database::connect();
+        $totalPriorityCount = 0;
+        try {
+            if ($db->fieldExists('is_priority', 'drivers')) {
+                $totalPriorityCount = $db->table('drivers')->where('is_priority', 1)->countAllResults();
+            }
+        } catch (\Throwable $e) {}
+
         $data = [
-            'title'        => 'Manajemen Pengemudi | Maijek Admin',
-            'drivers'      => $drivers,
-            'pager'        => $pager,
-            'perPage'      => $perPage,
-            'q'            => $q,
-            'status'       => $status,
-            'vehicle_type' => $vehicleType,
-            'totalCount'   => $pager->getTotal(),
+            'title'              => 'Manajemen Pengemudi | Maijek Admin',
+            'drivers'            => $drivers,
+            'pager'              => $pager,
+            'perPage'            => $perPage,
+            'q'                  => $q,
+            'status'             => $status,
+            'vehicle_type'       => $vehicleType,
+            'is_priority'        => $isPriority,
+            'totalPriorityCount' => $totalPriorityCount,
+            'totalCount'         => $pager->getTotal(),
         ];
 
         return view('admin/drivers/index', $data);
+    }
+
+    public function togglePriority($id)
+    {
+        $driverModel = new DriverModel();
+        $driver = $driverModel->find($id);
+
+        if (!$driver) {
+            if ($this->request->isAJAX() || $this->request->getHeaderLine('Accept') === 'application/json') {
+                return $this->response->setJSON(['status' => 404, 'message' => 'Driver tidak ditemukan']);
+            }
+            session()->setFlashdata('success', 'Gagal: Driver tidak ditemukan');
+            return redirect()->to('/admin/drivers');
+        }
+
+        $db = \Config\Database::connect();
+        // Pastikan kolom ada
+        if (!$db->fieldExists('is_priority', 'drivers')) {
+            $db->query("ALTER TABLE drivers ADD COLUMN is_priority TINYINT(1) NOT NULL DEFAULT 0 AFTER status;");
+        }
+
+        $currentPriority = (int)($driver['is_priority'] ?? 0);
+        $newPriority = ($currentPriority === 1) ? 0 : 1;
+
+        $db->table('drivers')->where('id', $id)->update(['is_priority' => $newPriority]);
+
+        $statusText = $newPriority ? 'Ditetapkan sebagai Driver Prioritas ⭐' : 'Status Driver Prioritas Dihapus';
+
+        if ($this->request->isAJAX() || $this->request->getHeaderLine('X-Requested-With') === 'XMLHttpRequest') {
+            return $this->response->setJSON([
+                'status'      => 200,
+                'message'     => 'Sukses: ' . $statusText,
+                'is_priority' => $newPriority,
+                'driver_id'   => $id
+            ]);
+        }
+
+        session()->setFlashdata('success', $driver['name'] . ': ' . $statusText);
+        return redirect()->to('/admin/drivers');
     }
 
     public function changeStatus($id)

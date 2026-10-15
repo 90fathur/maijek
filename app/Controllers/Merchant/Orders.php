@@ -173,58 +173,14 @@ class Orders extends BaseController
                 }
             }
         } else {
-            // Belum ada driver -> Otomatis broadcast ke kurir terdekat saat status 'processing' (merchant menerima & memasak) atau 'ready'
+            // Belum ada driver -> Otomatis broadcast ke kurir terdekat via Priority Dispatch saat status 'processing' atau 'ready'
             if ($status == 'processing' || $status == 'ready' || $status == 'accepted_by_merchant') {
                 if ($merchant && $merchant->latitude && $merchant->longitude) {
-                    $pickupLat = $merchant->latitude;
-                    $pickupLng = $merchant->longitude;
-                    $targetVehicle = strtolower($order['vehicle_type'] ?? 'motor');
-                    $radiusKey = $isMart ? 'search_radius_mart' : 'search_radius_food';
-                    $radiusSetting = $db->table('settings')->where('setting_key', $radiusKey)->get()->getRow();
-                    $radius = $radiusSetting ? (float)$radiusSetting->setting_value : 15.0;
-
-                    $builder = $db->table('drivers');
-                    $builder->select("*, (6371 * acos(cos(radians($pickupLat)) * cos(radians(latitude)) * cos(radians(longitude) - radians($pickupLng)) + sin(radians($pickupLat)) * sin(radians(latitude)))) AS distance");
-                    $builder->where('is_online', 1);
-                    $builder->where('status', 'active');
-                    $builder->where('verification_status', 'approved');
-                    $builder->where('fcm_token !=', null);
-                    $builder->where('fcm_token !=', '');
-
                     try {
-                        if ($db->fieldExists('last_heartbeat_at', 'drivers')) {
-                            $builder->where('last_heartbeat_at >=', date('Y-m-d H:i:s', strtotime('-1 hours')));
-                        }
-                    } catch (\Throwable $e) {}
-
-                    if (in_array($targetVehicle, ['mobil', 'car'])) {
-                        $builder->whereIn('vehicle_type', ['mobil', 'Mobil', 'MOBIL', 'car', 'Car', 'car_premium']);
-                    } else {
-                        $builder->whereIn('vehicle_type', ['motor', 'Motor', 'MOTOR']);
-                    }
-                    $builder->having('distance <=', $radius);
-                    $builder->orderBy('distance', 'ASC');
-                    $builder->limit(20);
-                    $drivers = $builder->get()->getResultArray();
-
-                    $vehicleLabel = in_array($targetVehicle, ['mobil', 'car']) ? 'Kurir Mobil 🚗' : 'Kurir Motor 🛵';
-
-                    foreach ($drivers as $d) {
-                        $driverBody = ($status == 'processing' || $status == 'accepted_by_merchant')
-                            ? ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' sedang menyiapkan pesanan. Ketuk untuk ambil order sekarang!'
-                            : ($isMart ? 'Toko ' : 'Restoran ') . $merchant->name . ' telah menyiapkan pesanan. Ketuk untuk ambil order!';
-
-                        $fcmService->sendPushNotification(
-                            $d['fcm_token'],
-                            ($isMart ? 'Order MaiMart (' : 'Order MaiFood (') . $vehicleLabel . ')!',
-                            $driverBody,
-                            [
-                                'type'         => $isMart ? 'new_mart_order' : 'new_food_order',
-                                'order_type'   => $isMart ? 'mart' : 'food',
-                                'order_id'     => (string)$orderId,
-                                'vehicle_type' => $targetVehicle
-                            ]
-                        );
+                        $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+                        $priorityDispatch->dispatchFoodOrder((int)$orderId, $order, $merchant, $status, $isMart);
+                    } catch (\Throwable $fcmEx) {
+                        log_message('error', 'Web Merchant PriorityDispatch error: ' . $fcmEx->getMessage());
                     }
                 }
             }

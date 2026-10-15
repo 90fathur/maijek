@@ -200,80 +200,15 @@ class Orders extends ResourceController
             ['type' => $isMart ? 'mart_status_update' : 'food_status_update', 'order_id' => $orderId, 'status' => $status, 'cancel_reason' => $updateData['cancel_reason'] ?? '']
         );
 
-        // Broadcast ke Driver terdekat (Radius 15 KM) saat merchant menerima pesanan ('processing') atau saat 'ready'
+        // Broadcast ke Driver terdekat menggunakan Priority Dispatch saat merchant menerima pesanan ('processing') atau saat 'ready'
         if ($status == 'processing' || $status == 'ready' || $status == 'accepted_by_merchant') {
             $merchant = $db->table('merchants')->where('id', $order['merchant_id'])->get()->getRow();
-
             if ($merchant && $merchant->latitude != null && $merchant->longitude != null) {
-                $pickupLat = $merchant->latitude;
-                $pickupLng = $merchant->longitude;
-                $radiusKey = $isMart ? 'search_radius_mart' : 'search_radius_food';
-                $radiusSetting = $db->table('settings')->where('setting_key', $radiusKey)->get()->getRow();
-                $radius = $radiusSetting ? (float)$radiusSetting->setting_value : 15.0;
-
-                $builder = $db->table('drivers');
-                $builder->select('drivers.*, (
-                    6371 * acos(
-                        cos(radians(' . $db->escape($pickupLat) . ')) * 
-                        cos(radians(latitude)) * 
-                        cos(radians(longitude) - radians(' . $db->escape($pickupLng) . ')) + 
-                        sin(radians(' . $db->escape($pickupLat) . ')) * 
-                        sin(radians(latitude))
-                    )
-                ) AS distance');
-                $builder->where('is_online', 1);
-                $builder->where('status', 'active');
-                $builder->where('verification_status', 'approved');
-                $builder->where('fcm_token !=', null);
-                $builder->where('fcm_token !=', '');
-
-                // --- Auto-Migration & ZOMBIE DRIVER FILTER ---
                 try {
-                    if ($db->fieldExists('last_heartbeat_at', 'drivers')) {
-                        // Abaikan driver yang detaknya sudah mati > 1 jam yang lalu (longgar karena testing)
-                        $builder->where('last_heartbeat_at >=', date('Y-m-d H:i:s', strtotime('-1 hours')));
-                    }
-                } catch (\Throwable $e) {
-                }
-                // -----------------------------
-
-                // Filter driver sesuai kendaraan yang dipilih pemesan (Motor vs Mobil)
-                $targetVehicle = strtolower($order['vehicle_type'] ?? 'motor');
-                if (in_array($targetVehicle, ['mobil', 'car'])) {
-                    $builder->whereIn('vehicle_type', ['mobil', 'Mobil', 'MOBIL', 'car', 'Car', 'car_premium']);
-                } else {
-                    $builder->whereIn('vehicle_type', ['motor', 'Motor', 'MOTOR']);
-                }
-
-                $builder->having('distance <=', $radius);
-                $builder->orderBy('distance', 'ASC');
-                $builder->limit(20);
-
-                $nearbyDrivers = $builder->get()->getResult();
-
-                $vehicleLabel = in_array($targetVehicle, ['mobil', 'car']) ? 'Kurir Mobil 🚗' : 'Kurir Motor 🛵';
-                try {
-                    foreach ($nearbyDrivers as $driver) {
-                        if (!empty($driver->fcm_token)) {
-                            $distText = round($driver->distance, 1) . ' KM';
-                            $driverBody = ($status == 'processing' || $status == 'accepted_by_merchant')
-                                ? ($isMart
-                                    ? "Toko {$merchant->name} ($distText) sedang menyiapkan belanjaan. Ambil sekarang!"
-                                    : "Resto {$merchant->name} ($distText) sedang menyiapkan pesanan. Ambil sekarang!")
-                                : ($isMart
-                                    ? "Ada pesanan belanja siap diantar dari toko berjarak $distText."
-                                    : "Ada pesanan makanan siap diantar dari restoran berjarak $distText.");
-
-                            $fcmService->sendPushNotification(
-                                $driver->fcm_token,
-                                ($isMart ? "Order MaiMart (" : "Order MaiFood (") . $vehicleLabel . ")!",
-                                $driverBody,
-                                ['type' => $isMart ? 'new_mart_order' : 'new_food_order', 'order_id' => $orderId, 'vehicle_type' => $targetVehicle]
-                            );
-                        }
-                    }
+                    $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+                    $priorityDispatch->dispatchFoodOrder((int)$orderId, $order, $merchant, $status, $isMart);
                 } catch (\Throwable $fcmEx) {
-                    log_message('error', 'Merchant Food FCM error: ' . $fcmEx->getMessage());
+                    log_message('error', 'Merchant Food PriorityDispatch error: ' . $fcmEx->getMessage());
                 }
             }
         }

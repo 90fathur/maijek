@@ -76,17 +76,27 @@ class Orders extends ResourceController
         $query = $builder->get();
         $orders = $query->getResultArray();
 
-        // Saring setiap pesanan sesuai batas radius layanannya masing-masing
-        $filteredOrders = array_filter($orders, function ($o) use ($radiusRide, $radiusSend, $radiusTitip) {
+        $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+
+        // Saring setiap pesanan sesuai batas radius layanannya dan jendela driver prioritas
+        $filteredOrders = array_filter($orders, function ($o) use ($radiusRide, $radiusSend, $radiusTitip, $priorityDispatch, $driver) {
             $dist = (float)($o['distance_to_pickup'] ?? 999);
             $sType = strtolower($o['service_type'] ?? '');
+            $inRadius = true;
             if (strpos($sType, 'titip') !== false) {
-                return $dist <= $radiusTitip;
+                $inRadius = ($dist <= $radiusTitip);
+            } else if (strpos($sType, 'send') !== false) {
+                $inRadius = ($dist <= $radiusSend);
+            } else {
+                $inRadius = ($dist <= $radiusRide);
             }
-            if (strpos($sType, 'send') !== false) {
-                return $dist <= $radiusSend;
+
+            if (!$inRadius) {
+                return false;
             }
-            return $dist <= $radiusRide;
+
+            // Saring visibilitas Driver Prioritas (hanya driver prioritas di jendela timeout pertama)
+            return $priorityDispatch->isOrderVisibleToDriver($o, $driver);
         });
 
         // Re-index array setelah filter
@@ -374,6 +384,16 @@ class Orders extends ResourceController
             'daily_skip_count' => $newCount,
             'last_skip_date' => $todayStr
         ]);
+
+        // Jika driver yang melewati pesanan adalah Driver Prioritas, segera broadcast fallback ke driver lain
+        $orderId = $this->request->getVar('order_id');
+        if (!empty($orderId) && !empty($driver->is_priority)) {
+            try {
+                $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+                $priorityDispatch->checkAndTriggerRideFallback((int)$orderId);
+                $priorityDispatch->checkAndTriggerFoodFallback((int)$orderId);
+            } catch (\Throwable $e) {}
+        }
 
         return $this->respond(['status' => 200, 'message' => 'Pesanan dilewati, penalti dicatat']);
     }

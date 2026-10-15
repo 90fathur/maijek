@@ -83,6 +83,12 @@ class Food extends ResourceController
             $orders = array_values($orders);
         }
 
+        $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+        $orders = array_filter($orders, function ($o) use ($priorityDispatch, $driver) {
+            return $priorityDispatch->isFoodOrderVisibleToDriver($o, $driver);
+        });
+        $orders = array_values($orders);
+
         $feeSetting = $settingModel->where('setting_key', 'food_platform_fee')->first();
         $feeTypeSetting = $settingModel->where('setting_key', 'food_platform_fee_type')->first();
         $platformFee = $feeSetting ? (float)$feeSetting['setting_value'] : 8;

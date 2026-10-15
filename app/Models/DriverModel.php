@@ -41,7 +41,8 @@ class DriverModel extends Model
         'qris_image',
         'qris_merchant_name',
         'qris_is_active',
-        'qris_status'
+        'qris_status',
+        'is_priority'
     ];
 
     // Dates

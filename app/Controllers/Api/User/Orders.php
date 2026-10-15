@@ -253,82 +253,21 @@ class Orders extends ResourceController
             return $this->respond(['status' => 500, 'message' => 'Gagal membuat pesanan', 'data' => null], 500);
         }
 
-        // Send Push Notification ke driver online terdekat sesuai radius dinamis layanan
-        $pickupLat = $this->request->getVar('pickup_lat');
-        $pickupLng = $this->request->getVar('pickup_lng');
+        // Kirim Push Notification menggunakan Priority Dispatch (Driver Prioritas terlebih dahulu, lalu fallback ke semua)
+        $pickupLat = (float)$this->request->getVar('pickup_lat');
+        $pickupLng = (float)$this->request->getVar('pickup_lng');
 
-        // Tentukan radius dinamis dari pengaturan admin (Mai-Ride, Mai-Send, Mai-Titip)
-        $rawService = strtolower($serviceType ?? 'motor');
-        if (strpos($rawService, 'titip') !== false) {
-            $radius = (float)($settingModel->where('setting_key', 'search_radius_titip')->first()['setting_value'] ?? 5.0);
-        } else if (strpos($rawService, 'send') !== false) {
-            $radius = (float)($settingModel->where('setting_key', 'search_radius_send')->first()['setting_value'] ?? 5.0);
-        } else {
-            $radius = (float)($settingModel->where('setting_key', 'search_radius_ride')->first()['setting_value'] ?? 5.0);
-        }
-
-        $builder = $db->table('drivers');
-        $builder->select('drivers.*, (
-            6371 * acos(
-                LEAST(1.0, cos(radians(' . $db->escape($pickupLat) . ')) * 
-                cos(radians(latitude)) * 
-                cos(radians(longitude) - radians(' . $db->escape($pickupLng) . ')) + 
-                sin(radians(' . $db->escape($pickupLat) . ')) * 
-                sin(radians(latitude)))
-            )
-        ) AS distance');
-        $builder->where('is_online', 1);
-        $builder->where('status', 'active'); // Abaikan driver yang disuspend atau nonaktif
-        $builder->where('verification_status', 'approved'); // Hanya driver yang sudah lolos verifikasi
-        $builder->where('fcm_token !=', null);
-        $builder->where('fcm_token !=', '');
-
-        // --- Auto-Migration & ZOMBIE DRIVER FILTER ---
         try {
-            if ($db->fieldExists('last_heartbeat_at', 'drivers')) {
-                // Abaikan driver yang detaknya sudah mati > 5 menit yang lalu
-                $builder->where('last_heartbeat_at >=', date('Y-m-d H:i:s', strtotime('-5 minutes')));
-            }
+            $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+            $priorityDispatch->dispatchRideOrder(
+                (int)$orderId,
+                $orderData,
+                $pickupLat,
+                $pickupLng,
+                $serviceType
+            );
         } catch (\Throwable $e) {
-        }
-        // -----------------------------
-
-        // Filter kendaraan sesuai tipe (Semua jastip motor / motor / mai_send masuk ke armada motor)
-        $isCar = in_array(strtolower($serviceType), ['mobil', 'car', 'car_premium', 'mai_send_mobil', 'mai_titip_mobil']);
-        if ($isCar) {
-            $builder->whereIn('vehicle_type', ['mobil', 'car', 'car_premium']);
-        } else {
-            $builder->where('vehicle_type', 'motor');
-        }
-
-        $builder->having('distance <=', $radius); // Radius pencarian dinamis (KM)
-        $builder->orderBy('distance', 'ASC');
-        $builder->limit(20); // Kirim ke maksimal 20 driver terdekat
-
-        $nearbyDrivers = $builder->get()->getResult();
-
-        if (count($nearbyDrivers) > 0) {
-            try {
-                $fcmService = new \App\Libraries\FcmService();
-                foreach ($nearbyDrivers as $driver) {
-                    if (!empty($driver->fcm_token)) {
-                        $fcmService->sendPushNotification(
-                            $driver->fcm_token,
-                            "Order Baru Masuk!",
-                            "Ada penumpang mencari supir di sekitar Anda (" . round($driver->distance, 1) . " KM).",
-                            ['type' => 'new_order', 'order_id' => $orderId]
-                        );
-                    }
-                }
-            } catch (\Throwable $e) {
-                log_message('error', 'FCM Broadcast Error: ' . $e->getMessage());
-            }
-        } else {
-            // DIAGNOSTIK LOG: Catat ke file log /writable/logs/ mengapa tidak ada driver
-            $debugMsg = "TIDAK ADA DRIVER DITEMUKAN untuk Order ID $orderId. Filter yang digunakan: " .
-                "Service=$serviceType, IsCar=" . ($isCar ? 'Yes' : 'No') .
-                ", Radius={$radius}KM, Status=Active, Verifikasi=Approved, Online=1";
-            log_message('error', $debugMsg);
+            log_message('error', 'PriorityDispatch create error: ' . $e->getMessage());
         }
 
         return $this->respond([
@@ -367,6 +306,14 @@ class Orders extends ResourceController
 
         if (!$order) {
             return $this->respond(['status' => 404, 'message' => 'Tidak ada pesanan aktif', 'data' => null], 404);
+        }
+
+        // Cek Fallback Driver Prioritas jika order masih mencari driver
+        if (($order['status'] ?? '') === 'pending') {
+            try {
+                $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+                $priorityDispatch->checkAndTriggerRideFallback((int)$order['id']);
+            } catch (\Throwable $e) {}
         }
 
         if (!empty($order['driver_name'])) {
@@ -530,6 +477,14 @@ class Orders extends ResourceController
 
         if (!$order) {
             return $this->respond(['status' => 404, 'message' => 'Pesanan tidak ditemukan atau bukan milik Anda'], 404);
+        }
+
+        // Cek Fallback Driver Prioritas jika order masih mencari driver
+        if (($order['status'] ?? '') === 'pending') {
+            try {
+                $priorityDispatch = new \App\Libraries\PriorityDispatchService();
+                $priorityDispatch->checkAndTriggerRideFallback((int)$order['id']);
+            } catch (\Throwable $e) {}
         }
 
         if (!empty($order['driver_name'])) {

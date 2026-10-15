@@ -1,6 +1,44 @@
 <?= $this->extend('admin/layout/main') ?>
 
 <?= $this->section('content') ?>
+<style>
+    .btn-priority-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+        color: #9ca3af;
+        outline: none;
+    }
+    .btn-priority-toggle:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        border-color: #cbd5e1;
+    }
+    .btn-priority-toggle.is-active {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+        color: #b45309;
+        border-color: #f59e0b;
+        box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+    }
+    .btn-priority-toggle.is-active i {
+        color: #d97706;
+        animation: starPop 0.3s ease;
+    }
+    @keyframes starPop {
+        0% { transform: scale(0.6); }
+        50% { transform: scale(1.3); }
+        100% { transform: scale(1); }
+    }
+</style>
+
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
     <h1 class="page-title animate-fade" style="margin-bottom: 0;">Manajemen Pengemudi</h1>
     <button onclick="document.getElementById('addDriverModal').style.display='flex'" class="btn-primary animate-fade" style="animation-delay: 0.1s;">
@@ -43,19 +81,29 @@
                 </select>
             </div>
 
+            <div class="filter-box">
+                <select name="is_priority" class="filter-select" onchange="this.form.submit()">
+                    <option value="">Semua Prioritas</option>
+                    <option value="1" <?= ($is_priority ?? '') === '1' ? 'selected' : '' ?>>Driver Prioritas ⭐</option>
+                </select>
+            </div>
+
             <button type="submit" class="btn-search">
                 <i class="fa-solid fa-filter"></i> Filter
             </button>
 
-            <?php if (!empty($q) || !empty($status) || !empty($vehicle_type)): ?>
+            <?php if (!empty($q) || !empty($status) || !empty($vehicle_type) || !empty($is_priority)): ?>
                 <a href="<?= base_url('admin/drivers') ?>" class="btn-reset" title="Reset filter">
                     <i class="fa-solid fa-rotate-left"></i> Reset
                 </a>
             <?php endif; ?>
         </form>
 
-        <div class="toolbar-stats">
-            Total: <b><?= number_format($totalCount ?? 0) ?></b> Pengemudi
+        <div class="toolbar-stats" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span>Total: <b><?= number_format($totalCount ?? 0) ?></b> Pengemudi</span>
+            <span style="background: #fef3c7; color: #b45309; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid #fde68a; display: inline-flex; align-items: center; gap: 4px;">
+                <i class="fa-solid fa-star" style="color: #f59e0b;"></i> <?= number_format($totalPriorityCount ?? 0) ?> Prioritas
+            </span>
         </div>
     </div>
 
@@ -64,6 +112,7 @@
             <thead>
                 <tr>
                     <th>ID</th>
+                    <th style="text-align: center; width: 120px;">Prioritas ⭐</th>
                     <th>Nama Pengemudi</th>
                     <th>No. HP</th>
                     <th>Kendaraan</th>
@@ -78,6 +127,17 @@
                     <?php foreach ($drivers as $driver): ?>
                         <tr>
                             <td>#DRV-<?= str_pad($driver['id'], 4, '0', STR_PAD_LEFT) ?></td>
+                            <td style="text-align: center;">
+                                <?php $isPrio = ((int)($driver['is_priority'] ?? 0) === 1); ?>
+                                <button type="button" 
+                                    id="priority-btn-<?= $driver['id'] ?>"
+                                    onclick="togglePriority(<?= $driver['id'] ?>, this)"
+                                    class="btn-priority-toggle <?= $isPrio ? 'is-active' : '' ?>"
+                                    title="<?= $isPrio ? 'Klik untuk cabut prioritas' : 'Klik untuk jadikan Driver Prioritas ⭐' ?>">
+                                    <i class="fa-<?= $isPrio ? 'solid' : 'regular' ?> fa-star"></i>
+                                    <span><?= $isPrio ? 'Prioritas' : 'Biasa' ?></span>
+                                </button>
+                            </td>
                             <td style="display: flex; align-items: center; gap: 12px;">
                                 <?php if (!empty($driver['photo'])): ?>
                                     <img src="<?= base_url($driver['photo']) ?>" alt="Foto" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary);">
@@ -201,7 +261,7 @@
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
                             <i class="fa-solid fa-magnifying-glass" style="font-size: 1.5rem; opacity: 0.3; margin-bottom: 8px; display: block;"></i>
                             Tidak ada data pengemudi yang cocok dengan kriteria pencarian.
                         </td>
@@ -576,6 +636,62 @@ function onAddVehicleTypeChange(type) {
         if (cap.value == '4' || cap.value == '') cap.value = '1';
         if (brand.value == 'Toyota Avanza' || brand.value == '') brand.value = 'Honda Beat';
     }
+}
+
+function togglePriority(driverId, btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+
+    fetch('<?= base_url('admin/drivers/togglePriority') ?>/' + driverId, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        if (data.status === 200) {
+            const isPriority = (data.is_priority === 1);
+            if (isPriority) {
+                btn.classList.add('is-active');
+                btn.innerHTML = '<i class="fa-solid fa-star"></i> <span>Prioritas</span>';
+                btn.title = 'Klik untuk cabut prioritas';
+            } else {
+                btn.classList.remove('is-active');
+                btn.innerHTML = '<i class="fa-regular fa-star"></i> <span>Biasa</span>';
+                btn.title = 'Klik untuk jadikan Driver Prioritas ⭐';
+            }
+            showToast(data.message);
+        } else {
+            alert(data.message || 'Gagal mengubah status prioritas');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        console.error(err);
+        alert('Terjadi kesalahan koneksi saat mengubah status prioritas');
+    });
+}
+
+function showToast(msg) {
+    let toast = document.getElementById('priority-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'priority-toast';
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:0.875rem;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.25);z-index:9999;transition:all 0.3s;opacity:0;transform:translateY(10px);display:flex;align-items:center;gap:8px;';
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#10b981;"></i> ' + msg;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+    }, 3000);
 }
 </script>
 

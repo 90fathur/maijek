@@ -507,6 +507,119 @@
         </div>
     </div>
 
+    <!-- PENGATURAN RADIUS RADAR & DRIVER PRIORITAS -->
+    <div class="stats-grid" style="margin-top: 24px;">
+        <!-- Radius Radar Pencarian Driver Dinamis -->
+        <div class="card-table" style="padding: 32px;">
+            <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 20px;">
+                <i class="fa-solid fa-radar" style="color: #0284c7; margin-right: 8px;"></i> Radar Radius Pencarian Driver (KM)
+            </h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 20px;">
+                Tentukan radius jangkauan maksimal (dalam Kilometer) pencarian supir/kurir terdekat saat order dibuat.
+            </p>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; font-size: 0.875rem; font-weight: 600; color: var(--text-main);">
+                    <i class="fa-solid fa-motorcycle" style="color: var(--primary); margin-right: 4px;"></i> Radius Mai-Ride (Motor & Mobil)
+                </label>
+                <div style="display: flex; align-items: center; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                    <input type="number" step="0.5" name="search_radius_ride" value="<?= esc($search_radius_ride['setting_value'] ?? 5) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 0.875rem;" placeholder="5" required>
+                    <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600;">KM</span>
+                </div>
+                <small style="color: var(--text-muted); font-size: 0.75rem;">Default: 5 KM dari titik jemput penumpang.</small>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; font-size: 0.875rem; font-weight: 600; color: var(--text-main);">
+                    <i class="fa-solid fa-box" style="color: #ea580c; margin-right: 4px;"></i> Radius Mai-Send (Pengiriman Paket)
+                </label>
+                <div style="display: flex; align-items: center; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                    <input type="number" step="0.5" name="search_radius_send" value="<?= esc($search_radius_send['setting_value'] ?? 5) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 0.875rem;" placeholder="5" required>
+                    <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600;">KM</span>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; font-size: 0.875rem; font-weight: 600; color: var(--text-main);">
+                    <i class="fa-solid fa-bag-shopping" style="color: #7c3aed; margin-right: 4px;"></i> Radius Mai-Titip (Jastip Belanja)
+                </label>
+                <div style="display: flex; align-items: center; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                    <input type="number" step="0.5" name="search_radius_titip" value="<?= esc($search_radius_titip['setting_value'] ?? 5) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 0.875rem;" placeholder="5" required>
+                    <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600;">KM</span>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                <div>
+                    <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; font-weight: 600; color: var(--text-main);">
+                        <i class="fa-solid fa-utensils" style="color: #dc2626; margin-right: 4px;"></i> Radius MaiFood
+                    </label>
+                    <div style="display: flex; align-items: center; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; padding-right: 10px;">
+                        <input type="number" step="0.5" name="search_radius_food" value="<?= esc($search_radius_food['setting_value'] ?? 15) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 0.875rem;" placeholder="15" required>
+                        <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 600;">KM</span>
+                    </div>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; font-weight: 600; color: var(--text-main);">
+                        <i class="fa-solid fa-store" style="color: #16a34a; margin-right: 4px;"></i> Radius MaiMart
+                    </label>
+                    <div style="display: flex; align-items: center; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 8px; padding-right: 10px;">
+                        <input type="number" step="0.5" name="search_radius_mart" value="<?= esc($search_radius_mart['setting_value'] ?? 15) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 0.875rem;" placeholder="15" required>
+                        <span style="color: var(--text-muted); font-size: 0.75rem; font-weight: 600;">KM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sistem Driver Prioritas (Priority Dispatch) -->
+        <div class="card-table" style="padding: 32px; border: 1px solid #fef08a; background: linear-gradient(to bottom, #ffffff, #fffbeb);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h2 style="font-size: 1.25rem; font-weight: 600; margin: 0;">
+                    <i class="fa-solid fa-star" style="color: #eab308; margin-right: 8px;"></i> Driver Prioritas (Priority Dispatch)
+                </h2>
+                <span style="display: inline-block; padding: 4px 10px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 0.75rem; font-weight: 700; border-radius: 20px;">
+                    ⭐ Server-Side Active
+                </span>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Status Fitur Driver Prioritas</label>
+                <select name="priority_dispatch_enabled" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; outline:none; font-size: 0.875rem; background: #fff;" required>
+                    <option value="1" <?= ($priority_dispatch_enabled['setting_value'] ?? '1') === '1' ? 'selected' : '' ?>>
+                        Aktif (Kirim ke Driver Prioritas Dulu)
+                    </option>
+                    <option value="0" <?= ($priority_dispatch_enabled['setting_value'] ?? '1') === '0' ? 'selected' : '' ?>>
+                        Nonaktif (Kirim ke Semua Driver Terdekat Sekaligus)
+                    </option>
+                </select>
+                <small style="color: var(--text-muted); display:block; margin-top: 6px;">
+                    Jika aktif, notifikasi & order baru hanya akan ditawarkan kepada Driver Prioritas terdekat terlebih dahulu.
+                </small>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">
+                    Waktu Tunggu Respon Driver Prioritas
+                </label>
+                <div style="display: flex; align-items: center; background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                    <input type="number" min="3" max="60" name="priority_dispatch_timeout" value="<?= esc($priority_dispatch_timeout['setting_value'] ?? 10) ?>" style="width: 100%; padding: 12px; border: none; background: transparent; outline:none; font-size: 0.95rem; font-weight: 600;" placeholder="10" required>
+                    <span style="color: #b45309; font-size: 0.875rem; font-weight: 700;">Detik</span>
+                </div>
+                <small style="color: var(--text-muted); display:block; margin-top: 6px;">
+                    Rekomendasi: <b>7 - 10 Detik</b>. Jika driver prioritas tidak merespon / melewati pesanan dalam durasi ini, order otomatis disebarkan ke seluruh driver lain.
+                </small>
+            </div>
+
+            <div style="background: rgba(254, 243, 199, 0.6); border: 1px solid #fde68a; border-radius: 10px; padding: 14px 16px; font-size: 0.825rem; color: #92400e; line-height: 1.6;">
+                <strong style="display: block; margin-bottom: 4px; font-size: 0.85rem;"><i class="fa-solid fa-circle-info"></i> Alur Kerja Driver Prioritas:</strong>
+                1. Tandai driver bintang/prioritas di menu <b>Manajemen Pengemudi</b>.<br>
+                2. Notifikasi order hanya masuk ke driver prioritas terdekat.<br>
+                3. Jika dalam <?= esc($priority_dispatch_timeout['setting_value'] ?? 10) ?> detik tidak ada respon atau driver prioritas klik lewati, sistem langsung menyebarkan order ke driver non-prioritas.<br>
+                4. <b>100% Server-Side</b>: Tidak perlu update atau rilis ulang APK pengemudi/penumpang!
+            </div>
+        </div>
+    </div>
+
     <div class="stats-grid" style="margin-top: 24px;">
         <div class="card-table" style="padding: 32px;">
             <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 24px;"><i class="fa-brands fa-whatsapp" style="color: #25D366; margin-right: 8px;"></i> Integrasi API OTP (WhatsApp)</h2>

@@ -100,6 +100,73 @@ $routes->get('migrate-radius', function () {
     return redirect()->to(base_url('api/migrate-radius'));
 });
 
+// ==== LINK MIGRASI DATABASE ONLINE (DRIVER PRIORITAS) ====
+$routes->get('api/migrate-priority-dispatch', function () {
+    try {
+        $db = \Config\Database::connect();
+        $messages = [];
+
+        // 1. Tambah kolom is_priority ke drivers
+        if (!$db->fieldExists('is_priority', 'drivers')) {
+            $db->query("ALTER TABLE drivers ADD COLUMN is_priority TINYINT(1) NOT NULL DEFAULT 0 AFTER status;");
+            try {
+                $db->query("ALTER TABLE drivers ADD INDEX idx_drivers_priority (is_priority, is_online, status);");
+            } catch (\Throwable $e) {}
+            $messages[] = "Kolom <code>is_priority</code> (TINYINT) berhasil ditambahkan ke tabel <code>drivers</code>.";
+        } else {
+            $messages[] = "Kolom <code>is_priority</code> sudah ada pada tabel <code>drivers</code>.";
+        }
+
+        // 2. Tambah kolom priority_dispatched_at & fallback_dispatched_at ke orders
+        if (!$db->fieldExists('priority_dispatched_at', 'orders')) {
+            $db->query("ALTER TABLE orders ADD COLUMN priority_dispatched_at DATETIME NULL AFTER status;");
+            $messages[] = "Kolom <code>priority_dispatched_at</code> berhasil ditambahkan ke tabel <code>orders</code>.";
+        }
+        if (!$db->fieldExists('fallback_dispatched_at', 'orders')) {
+            $db->query("ALTER TABLE orders ADD COLUMN fallback_dispatched_at DATETIME NULL AFTER priority_dispatched_at;");
+            $messages[] = "Kolom <code>fallback_dispatched_at</code> berhasil ditambahkan ke tabel <code>orders</code>.";
+        }
+
+        // 3. Tambah kolom priority_dispatched_at & fallback_dispatched_at ke food_orders
+        if (!$db->fieldExists('priority_dispatched_at', 'food_orders')) {
+            $db->query("ALTER TABLE food_orders ADD COLUMN priority_dispatched_at DATETIME NULL AFTER status;");
+            $messages[] = "Kolom <code>priority_dispatched_at</code> berhasil ditambahkan ke tabel <code>food_orders</code>.";
+        }
+        if (!$db->fieldExists('fallback_dispatched_at', 'food_orders')) {
+            $db->query("ALTER TABLE food_orders ADD COLUMN fallback_dispatched_at DATETIME NULL AFTER priority_dispatched_at;");
+            $messages[] = "Kolom <code>fallback_dispatched_at</code> berhasil ditambahkan ke tabel <code>food_orders</code>.";
+        }
+
+        // 4. Default settings
+        $defaults = [
+            'priority_dispatch_enabled' => '1',
+            'priority_dispatch_timeout' => '10',
+        ];
+        foreach ($defaults as $k => $v) {
+            $exist = $db->table('settings')->where('setting_key', $k)->countAllResults();
+            if ($exist == 0) {
+                $db->table('settings')->insert([
+                    'setting_key'   => $k,
+                    'setting_value' => $v,
+                    'description'   => 'Pengaturan Driver Prioritas Dinamis'
+                ]);
+                $messages[] = "Pengaturan <code>{$k}</code> berhasil diinisialisasi ke <b>{$v}</b>.";
+            } else {
+                $messages[] = "Pengaturan <code>{$k}</code> sudah aktif.";
+            }
+        }
+
+        $htmlMessages = "<li>" . implode("</li><li>", $messages) . "</li>";
+        return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Migrasi Driver Prioritas</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:40px 20px;display:flex;justify-content:center;} .card{background:#fff;max-width:580px;width:100%;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);padding:32px;} h2{color:#059669;margin-top:0;} ul{background:#f9fafb;border-radius:10px;padding:16px 20px 16px 36px;border:1px solid #e5e7eb;line-height:1.7;} code{background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:600;}</style></head><body><div class='card'><h2><span>🎉</span> Migrasi Driver Prioritas Selesai!</h2><p>Struktur database untuk fitur <strong>Driver Prioritas</strong> telah siap digunakan 100%.</p><ul>$htmlMessages</ul><p style='color:#6b7280;font-size:13px;'>Admin dapat memilih driver prioritas di menu <strong>Admin &rarr; Pengemudi</strong>.</p></div></body></html>";
+    } catch (\Throwable $e) {
+        return "<h1>Gagal Migrasi Driver Prioritas</h1><p style='color:red;'>Error: " . $e->getMessage() . "</p>";
+    }
+});
+$routes->get('migrate-priority-dispatch', function () {
+    return redirect()->to(base_url('api/migrate-priority-dispatch'));
+});
+
+
 // Helper to restrict debug / maintenance / direct DDL migration endpoints
 $isAuthorizedDebug = function () {
     if (is_cli()) {
@@ -742,6 +809,8 @@ $routes->group('admin', ['namespace' => 'App\Controllers\Admin', 'filter' => 'ad
     $routes->post('drivers/adjustBalance/(:num)', 'Drivers::adjustBalance/$1');
     $routes->post('drivers/resetPassword/(:num)', 'Drivers::resetPassword/$1');
     $routes->post('drivers/updateVehicle/(:num)', 'Drivers::updateVehicle/$1');
+    $routes->post('drivers/togglePriority/(:num)', 'Drivers::togglePriority/$1');
+    $routes->get('drivers/togglePriority/(:num)', 'Drivers::togglePriority/$1');
 
     // Users
     $routes->get('users', 'Users::index');

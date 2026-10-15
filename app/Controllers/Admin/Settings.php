@@ -85,6 +85,10 @@ class Settings extends BaseController
             'search_radius_titip' => $settingModel->where('setting_key', 'search_radius_titip')->first(),
             'search_radius_food'  => $settingModel->where('setting_key', 'search_radius_food')->first(),
             'search_radius_mart'  => $settingModel->where('setting_key', 'search_radius_mart')->first(),
+
+            // Driver Prioritas (Priority Dispatch)
+            'priority_dispatch_enabled' => $settingModel->where('setting_key', 'priority_dispatch_enabled')->first(),
+            'priority_dispatch_timeout' => $settingModel->where('setting_key', 'priority_dispatch_timeout')->first(),
         ];
 
         return view('admin/settings/index', $data);
@@ -169,6 +173,10 @@ class Settings extends BaseController
         $this->saveOrUpdateSetting($settingModel, 'search_radius_titip', $this->request->getPost('search_radius_titip'));
         $this->saveOrUpdateSetting($settingModel, 'search_radius_food', $this->request->getPost('search_radius_food'));
         $this->saveOrUpdateSetting($settingModel, 'search_radius_mart', $this->request->getPost('search_radius_mart'));
+
+        // Driver Prioritas (Priority Dispatch) Update
+        $this->saveOrUpdateSetting($settingModel, 'priority_dispatch_enabled', $this->request->getPost('priority_dispatch_enabled') ?? '1');
+        $this->saveOrUpdateSetting($settingModel, 'priority_dispatch_timeout', $this->request->getPost('priority_dispatch_timeout') ?? '10');
 
         $new_password = $this->request->getPost('new_password');
         if (!empty($new_password)) {
