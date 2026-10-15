@@ -50,6 +50,11 @@ class FcmService
         }
     }
 
+    public function sendToToken($fcmToken, $title, $body, $data = [])
+    {
+        return $this->sendPushNotification($fcmToken, $title, $body, $data);
+    }
+
     public function sendPushNotification($fcmToken, $title, $body, $data = [])
     {
         if (empty($fcmToken)) return false;
@@ -69,7 +74,7 @@ class FcmService
         $isBroadcast = isset($data['type']) && in_array($data['type'], ['system', 'promo', 'info']);
         $target = $data['target'] ?? '';
         $type = $data['type'] ?? '';
-        $isNewOrderAlert = in_array($type, ['new_order', 'new_food_order', 'driver_order_request', 'merchant_new_order']);
+        $isNewOrderAlert = in_array($type, ['new_order', 'new_food_order', 'driver_order_request', 'merchant_new_order', 'new_mart_order']);
 
         $channelId = $data['channel_id'] ?? null;
         $sound = $data['sound'] ?? null;
@@ -189,7 +194,7 @@ class FcmService
 
         $target = $data['target'] ?? '';
         $type = $data['type'] ?? '';
-        $isNewOrderAlert = in_array($type, ['new_order', 'new_food_order', 'driver_order_request', 'merchant_new_order']);
+        $isNewOrderAlert = in_array($type, ['new_order', 'new_food_order', 'driver_order_request', 'merchant_new_order', 'new_mart_order']);
         $channelId = $data['channel_id'] ?? ($isNewOrderAlert ? 'maifood_order_channel_v2' : 'high_importance_channel');
         $sound = ($channelId === 'maifood_order_channel_v2') ? 'order_ringtone' : 'default';
 
