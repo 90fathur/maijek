@@ -58,7 +58,21 @@ class Food extends ResourceController
             // Ambil 1 menu andalan
             $topMenu = $menuModel->where('merchant_id', $m['id'])->where('is_available', 1)->first();
             $m['top_menu'] = $topMenu ? $topMenu['name'] : 'Menu Lengkap';
+
+            $this->enrichMerchantLiveStatus($m);
         }
+
+        // Prioritaskan restoran yang Live Kasir di atas, lalu urutkan berdasarkan jarak
+        usort($merchants, function ($a, $b) {
+            $liveA = !empty($a['is_live_kasir']) ? 1 : 0;
+            $liveB = !empty($b['is_live_kasir']) ? 1 : 0;
+            if ($liveA !== $liveB) {
+                return $liveB - $liveA;
+            }
+            $distA = isset($a['distance']) ? (float)$a['distance'] : 0;
+            $distB = isset($b['distance']) ? (float)$b['distance'] : 0;
+            return $distA <=> $distB;
+        });
 
         return $this->respond(['status' => 200, 'message' => 'Daftar Restoran', 'data' => $merchants]);
     }
@@ -75,7 +89,7 @@ class Food extends ResourceController
 
         // 1. Cari Menu Makanan yang cocok
         $menuBuilder = $db->table('merchant_menus')
-            ->select('merchant_menus.*, merchants.name as merchant_name, merchants.address as merchant_address, merchants.photo as merchant_photo, merchants.latitude, merchants.longitude, merchants.is_open')
+            ->select('merchant_menus.*, merchants.name as merchant_name, merchants.address as merchant_address, merchants.photo as merchant_photo, merchants.latitude, merchants.longitude, merchants.is_open, merchants.last_active_at, merchants.opening_time, merchants.closing_time, merchants.operating_days')
             ->join('merchants', 'merchants.id = merchant_menus.merchant_id')
             ->where('merchant_menus.is_available', 1)
             ->where('merchants.is_open', 1);
@@ -134,6 +148,21 @@ class Food extends ResourceController
             } else {
                 $menu['discount_percent'] = 0;
             }
+
+            // Enrich Live Kasir untuk menu yang tampil di pencarian
+            $mockMerchant = [
+                'is_open' => $menu['is_open'] ?? 1,
+                'last_active_at' => $menu['last_active_at'] ?? null,
+                'opening_time' => $menu['opening_time'] ?? null,
+                'closing_time' => $menu['closing_time'] ?? null,
+                'operating_days' => $menu['operating_days'] ?? null,
+            ];
+            $this->enrichMerchantLiveStatus($mockMerchant);
+            $menu['is_live_kasir'] = $mockMerchant['is_live_kasir'];
+            $menu['kasir_status'] = $mockMerchant['kasir_status'];
+            $menu['kasir_badge_text'] = $mockMerchant['kasir_badge_text'];
+            $menu['kasir_badge_color'] = $mockMerchant['kasir_badge_color'];
+            unset($menu['last_active_at']);
         }
 
         // 2. Cari Restoran yang cocok
@@ -180,6 +209,8 @@ class Food extends ResourceController
             // Top menu
             $topMenu = $menuModel->where('merchant_id', $m['id'])->where('is_available', 1)->first();
             $m['top_menu'] = $topMenu ? $topMenu['name'] : 'Menu Lengkap';
+
+            $this->enrichMerchantLiveStatus($m);
         }
 
         return $this->respond([
@@ -323,10 +354,118 @@ class Food extends ResourceController
 
         $merchant['operating_days_text'] = $opDaysText;
         $merchant['is_operating_today'] = $isOperatingToday;
+        $this->enrichMerchantLiveStatus($merchant);
 
         $merchant['menus'] = $menus;
 
         return $this->respond(['status' => 200, 'message' => 'Detail Restoran', 'data' => $merchant]);
+    }
+
+    /**
+     * Helper Status Live Kasir & Jam Operasional Toko
+     */
+    protected function enrichMerchantLiveStatus(&$merchant)
+    {
+        date_default_timezone_set('Asia/Makassar');
+        $isOpenToggle = isset($merchant['is_open']) && ((int)$merchant['is_open'] === 1 || $merchant['is_open'] === '1');
+        
+        // 1. Cek Jadwal Hari Operasional
+        $today = (string)date('N');
+        $rawOpDays = trim($merchant['operating_days'] ?? '');
+        $isStoreOpenToday = true;
+        $effectiveOpen = $merchant['opening_time'] ?? null;
+        $effectiveClose = $merchant['closing_time'] ?? null;
+
+        if (!empty($rawOpDays)) {
+            if (strpos($rawOpDays, '{') === 0) {
+                $decoded = json_decode($rawOpDays, true);
+                if (isset($decoded['mode']) && $decoded['mode'] === 'daily' && isset($decoded['days'][$today])) {
+                    $todayCfg = $decoded['days'][$today];
+                    if (empty($todayCfg['is_open'])) {
+                        $isStoreOpenToday = false;
+                    } else {
+                        if (!empty($todayCfg['open'])) $effectiveOpen = $todayCfg['open'];
+                        if (!empty($todayCfg['close'])) $effectiveClose = $todayCfg['close'];
+                    }
+                }
+            } else {
+                $allowedDays = array_map('trim', explode(',', $rawOpDays));
+                if (!in_array($today, $allowedDays)) {
+                    $isStoreOpenToday = false;
+                }
+            }
+        }
+
+        // 2. Cek Jam Operasional
+        $nowTime = date('H:i:s');
+        $isInOperatingHours = true;
+        if (!empty($effectiveOpen) && !empty($effectiveClose)) {
+            if ($effectiveOpen <= $effectiveClose) {
+                $isInOperatingHours = ($nowTime >= $effectiveOpen && $nowTime <= $effectiveClose);
+            } else {
+                $isInOperatingHours = ($nowTime >= $effectiveOpen || $nowTime <= $effectiveClose);
+            }
+        }
+
+        // 3. Cek Heartbeat Aplikasi Kasir (Live dalam 7 menit terakhir)
+        $lastActiveAt = $merchant['last_active_at'] ?? null;
+        $isLiveHeartbeat = false;
+        $minutesAgo = null;
+        if (!empty($lastActiveAt)) {
+            $lastActiveTimestamp = strtotime($lastActiveAt);
+            $diffSeconds = time() - $lastActiveTimestamp;
+            $minutesAgo = max(0, round($diffSeconds / 60));
+            // Toleransi online 7 menit (420 detik)
+            if ($diffSeconds <= 420) {
+                $isLiveHeartbeat = true;
+            }
+        }
+
+        // 4. Tentukan Status Kasir
+        $isLiveKasir = false;
+        $kasirStatus = 'closed';
+        $kasirBadgeText = 'Toko Tutup';
+        $kasirBadgeColor = 'red';
+        $kasirMessage = 'Restoran sedang tutup.';
+
+        if (!$isOpenToggle) {
+            $kasirStatus = 'closed';
+            $kasirBadgeText = 'Toko Tutup';
+            $kasirBadgeColor = 'red';
+            $kasirMessage = 'Toko saat ini sedang tutup/nonaktif.';
+        } elseif (!$isStoreOpenToday) {
+            $kasirStatus = 'holiday';
+            $kasirBadgeText = 'Libur Hari Ini';
+            $kasirBadgeColor = 'red';
+            $kasirMessage = 'Restoran libur hari ini sesuai jadwal operasional.';
+        } elseif (!$isInOperatingHours) {
+            $kasirStatus = 'out_of_hours';
+            $kasirBadgeText = 'Di Luar Jam Buka';
+            $kasirBadgeColor = 'grey';
+            $openStr = $effectiveOpen ? substr($effectiveOpen, 0, 5) : '08:00';
+            $closeStr = $effectiveClose ? substr($effectiveClose, 0, 5) : '21:00';
+            $kasirMessage = "Di luar jam operasional (Buka $openStr - $closeStr).";
+        } elseif ($isLiveHeartbeat) {
+            $isLiveKasir = true;
+            $kasirStatus = 'live';
+            $kasirBadgeText = 'Live Kasir';
+            $kasirBadgeColor = 'green';
+            $kasirMessage = 'Kasir sedang aktif di aplikasi dan siap langsung memproses pesanan.';
+        } else {
+            // Toko buka & jam buka, tapi kasir belum membuka aplikasi baru-baru ini
+            $kasirStatus = 'standby';
+            $kasirBadgeText = 'Kasir Standby';
+            $kasirBadgeColor = 'orange';
+            $timeText = ($minutesAgo !== null && $minutesAgo < 60) ? " ($minutesAgo mnt lalu)" : "";
+            $kasirMessage = "Toko buka jam operasional, namun kasir belum aktif di aplikasi$timeText. Pesanan mungkin membutuhkan waktu respon lebih lama.";
+        }
+
+        $merchant['is_live_kasir'] = $isLiveKasir;
+        $merchant['kasir_status'] = $kasirStatus;
+        $merchant['kasir_badge_text'] = $kasirBadgeText;
+        $merchant['kasir_badge_color'] = $kasirBadgeColor;
+        $merchant['kasir_message'] = $kasirMessage;
+        $merchant['minutes_since_active'] = $minutesAgo;
     }
 
     // Membuat order makanan baru

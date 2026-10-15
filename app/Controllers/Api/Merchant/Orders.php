@@ -18,6 +18,10 @@ class Orders extends ResourceController
         $merchant_id = $payload['uid'];
 
         $db = \Config\Database::connect();
+
+        // Heartbeat Live Kasir (Throttle per 30 detik untuk efisiensi database)
+        $db->query("UPDATE merchants SET last_active_at = NOW() WHERE id = ? AND (last_active_at IS NULL OR last_active_at < DATE_SUB(NOW(), INTERVAL 30 SECOND))", [$merchant_id]);
+
         $builder = $db->table('food_orders');
         $builder->select('food_orders.*, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate as driver_plate, drivers.photo as driver_photo');
         $builder->join('users', 'users.id = food_orders.user_id', 'left');
@@ -45,6 +49,10 @@ class Orders extends ResourceController
         $merchant_id = $payload['uid'];
 
         $db = \Config\Database::connect();
+
+        // Heartbeat Live Kasir (Throttle per 30 detik untuk efisiensi database)
+        $db->query("UPDATE merchants SET last_active_at = NOW() WHERE id = ? AND (last_active_at IS NULL OR last_active_at < DATE_SUB(NOW(), INTERVAL 30 SECOND))", [$merchant_id]);
+
         $builder = $db->table('food_orders');
         $builder->select('food_orders.*, users.name as user_name, users.phone as user_phone, drivers.name as driver_name, drivers.phone as driver_phone, drivers.vehicle_plate as driver_plate, drivers.photo as driver_photo');
         $builder->join('users', 'users.id = food_orders.user_id', 'left');
@@ -131,6 +139,9 @@ class Orders extends ResourceController
 
         $db = \Config\Database::connect();
         $db->transStart();
+
+        // Perbarui aktivitas kasir seketika saat merespons pesanan
+        $db->table('merchants')->where('id', $merchant_id)->update(['last_active_at' => date('Y-m-d H:i:s')]);
 
         $updateData = ['status' => $status];
         if ($status === 'cancelled') {

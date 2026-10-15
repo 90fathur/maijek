@@ -36,7 +36,10 @@ class Profile extends ResourceController
         if (!$merchant) return $this->respond(['status' => 404, 'message' => 'Not found'], 404);
 
         $newStatus = $merchant['is_open'] == 1 ? 0 : 1;
-        $merchantModel->update($payload['uid'], ['is_open' => $newStatus]);
+        $merchantModel->update($payload['uid'], [
+            'is_open' => $newStatus,
+            'last_active_at' => $newStatus == 1 ? date('Y-m-d H:i:s') : null,
+        ]);
 
         return $this->respond([
             'status' => 200,

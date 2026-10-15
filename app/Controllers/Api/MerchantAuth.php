@@ -177,6 +177,9 @@ class MerchantAuth extends ResourceController
             return $this->respond(['status' => 401, 'message' => 'Nomor HP atau kata sandi salah', 'data' => null], 401);
         }
 
+        // Catat heartbeat kasir aktif saat login
+        $merchantModel->update($merchant['id'], ['last_active_at' => date('Y-m-d H:i:s')]);
+
         $key = getenv('JWT_SECRET_KEY') ?: 'maijek_jwt_default_secret_key_change_in_production';
         $payload = [
             'iat'  => time(),

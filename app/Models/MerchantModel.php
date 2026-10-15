@@ -8,6 +8,6 @@ class MerchantModel extends Model
 {
     protected $table = 'merchants';
     protected $primaryKey = 'id';
-    protected $allowedFields = ['name', 'phone', 'password', 'address', 'latitude', 'longitude', 'photo', 'is_open', 'merchant_type', 'category', 'balance', 'fcm_token', 'opening_time', 'closing_time', 'operating_days', 'verification_status', 'ktp_image', 'business_image'];
+    protected $allowedFields = ['name', 'phone', 'password', 'address', 'latitude', 'longitude', 'photo', 'is_open', 'last_active_at', 'merchant_type', 'category', 'balance', 'fcm_token', 'opening_time', 'closing_time', 'operating_days', 'verification_status', 'ktp_image', 'business_image'];
     protected $useTimestamps = true;
 }
