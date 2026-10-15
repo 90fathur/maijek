@@ -41,8 +41,9 @@ class Drivers extends ResourceController
             $builder->where('vehicle_type', 'motor');
         }
 
-        // Radius filter (~10 KM untuk simulasi agar banyak)
-        $radius = 10;
+        // Radius filter dinamis (berdasarkan search_radius_ride atau minimal 5 KM)
+        $radiusSetting = $db->table('settings')->where('setting_key', 'search_radius_ride')->get()->getRow();
+        $radius = $radiusSetting ? max(5.0, (float)$radiusSetting->setting_value) : 10;
         $builder->select('id, name, vehicle_type, latitude, longitude, ( 6371 * acos( LEAST(1.0, cos( radians(' . $db->escape($lat) . ') ) * cos( radians( latitude ) ) * cos( radians( longitude ) - radians(' . $db->escape($lng) . ') ) + sin( radians(' . $db->escape($lat) . ') ) * sin( radians( latitude ) ) ) ) ) AS distance');
         $builder->having('distance <', $radius);
         $builder->orderBy('distance', 'ASC');

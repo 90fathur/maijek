@@ -253,11 +253,19 @@ class Orders extends ResourceController
             return $this->respond(['status' => 500, 'message' => 'Gagal membuat pesanan', 'data' => null], 500);
         }
 
-        // Send Push Notification to nearby online drivers ONLY (Radius: 3 KM)
+        // Send Push Notification ke driver online terdekat sesuai radius dinamis layanan
         $pickupLat = $this->request->getVar('pickup_lat');
         $pickupLng = $this->request->getVar('pickup_lng');
 
-        $radius = 3; // 3 KM
+        // Tentukan radius dinamis dari pengaturan admin (Mai-Ride, Mai-Send, Mai-Titip)
+        $rawService = strtolower($serviceType ?? 'motor');
+        if (strpos($rawService, 'titip') !== false) {
+            $radius = (float)($settingModel->where('setting_key', 'search_radius_titip')->first()['setting_value'] ?? 5.0);
+        } else if (strpos($rawService, 'send') !== false) {
+            $radius = (float)($settingModel->where('setting_key', 'search_radius_send')->first()['setting_value'] ?? 5.0);
+        } else {
+            $radius = (float)($settingModel->where('setting_key', 'search_radius_ride')->first()['setting_value'] ?? 5.0);
+        }
 
         $builder = $db->table('drivers');
         $builder->select('drivers.*, (
@@ -293,7 +301,7 @@ class Orders extends ResourceController
             $builder->where('vehicle_type', 'motor');
         }
 
-        $builder->having('distance <=', 5); // Radius pencarian 5 KM (sinkron dengan radar driver)
+        $builder->having('distance <=', $radius); // Radius pencarian dinamis (KM)
         $builder->orderBy('distance', 'ASC');
         $builder->limit(20); // Kirim ke maksimal 20 driver terdekat
 
@@ -319,7 +327,7 @@ class Orders extends ResourceController
             // DIAGNOSTIK LOG: Catat ke file log /writable/logs/ mengapa tidak ada driver
             $debugMsg = "TIDAK ADA DRIVER DITEMUKAN untuk Order ID $orderId. Filter yang digunakan: " .
                 "Service=$serviceType, IsCar=" . ($isCar ? 'Yes' : 'No') .
-                ", Radius=5KM, Status=Active, Verifikasi=Approved, Online=1";
+                ", Radius={$radius}KM, Status=Active, Verifikasi=Approved, Online=1";
             log_message('error', $debugMsg);
         }
 

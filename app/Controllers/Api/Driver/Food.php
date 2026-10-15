@@ -57,6 +57,32 @@ class Food extends ResourceController
         $orders = $orderBuilder->orderBy('created_at', 'DESC')->findAll();
 
         $settingModel = new \App\Models\SettingModel();
+        $radiusFood = (float)($settingModel->where('setting_key', 'search_radius_food')->first()['setting_value'] ?? 15.0);
+        $radiusMart = (float)($settingModel->where('setting_key', 'search_radius_mart')->first()['setting_value'] ?? 15.0);
+
+        // Filter berdasarkan radius jarak driver ke restoran/toko
+        if (!empty($driver['latitude']) && !empty($driver['longitude'])) {
+            $dLat = (float)$driver['latitude'];
+            $dLng = (float)$driver['longitude'];
+
+            $orders = array_filter($orders, function ($o) use ($dLat, $dLng, $radiusFood, $radiusMart) {
+                if (empty($o['merchant_lat']) || empty($o['merchant_lng'])) {
+                    return true;
+                }
+                $mLat = (float)$o['merchant_lat'];
+                $mLng = (float)$o['merchant_lng'];
+                $theta = $dLng - $mLng;
+                $dist = sin(deg2rad($dLat)) * sin(deg2rad($mLat)) + cos(deg2rad($dLat)) * cos(deg2rad($mLat)) * cos(deg2rad($theta));
+                $dist = acos(min(max($dist, -1.0), 1.0));
+                $distKm = rad2deg($dist) * 60 * 1.1515 * 1.609344;
+
+                $isMart = (isset($o['order_type']) && $o['order_type'] === 'mart');
+                $maxR = $isMart ? $radiusMart : $radiusFood;
+                return $distKm <= $maxR;
+            });
+            $orders = array_values($orders);
+        }
+
         $feeSetting = $settingModel->where('setting_key', 'food_platform_fee')->first();
         $feeTypeSetting = $settingModel->where('setting_key', 'food_platform_fee_type')->first();
         $platformFee = $feeSetting ? (float)$feeSetting['setting_value'] : 8;

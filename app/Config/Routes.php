@@ -61,6 +61,45 @@ $routes->get('migrate-live-kasir', function () {
     return redirect()->to(base_url('api/migrate-live-kasir'));
 });
 
+// ==== LINK INISIALISASI RADIUS RADAR PENCARIAN DRIVER DINAMIS ====
+$routes->get('api/migrate-radius', function () {
+    try {
+        $db = \Config\Database::connect();
+        $messages = [];
+
+        $defaultRadius = [
+            'search_radius_ride'  => '5',
+            'search_radius_send'  => '5',
+            'search_radius_titip' => '5',
+            'search_radius_food'  => '15',
+            'search_radius_mart'  => '15',
+        ];
+
+        foreach ($defaultRadius as $key => $val) {
+            $exist = $db->table('settings')->where('setting_key', $key)->countAllResults();
+            if ($exist == 0) {
+                $db->table('settings')->insert([
+                    'setting_key'   => $key,
+                    'setting_value' => $val,
+                    'description'   => 'Radius radar pencarian driver dinamis (KM)'
+                ]);
+                $messages[] = "Pengaturan <code>{$key}</code> berhasil diinisialisasi ke <b>{$val} KM</b>.";
+            } else {
+                $current = $db->table('settings')->where('setting_key', $key)->get()->getRow();
+                $messages[] = "Pengaturan <code>{$key}</code> sudah ada (Nilai saat ini: <b>" . ($current->setting_value ?? $val) . " KM</b>).";
+            }
+        }
+
+        $htmlMessages = "<li>" . implode("</li><li>", $messages) . "</li>";
+        return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Inisialisasi Radius Radar</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:40px 20px;display:flex;justify-content:center;} .card{background:#fff;max-width:580px;width:100%;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);padding:32px;} h2{color:#059669;margin-top:0;} ul{background:#f9fafb;border-radius:10px;padding:16px 20px 16px 36px;border:1px solid #e5e7eb;line-height:1.7;} code{background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:600;}</style></head><body><div class='card'><h2><span>🎉</span> Inisialisasi Radius Radar Selesai!</h2><p>Pengaturan radius radar pencarian driver dinamis telah siap:</p><ul>$htmlMessages</ul><p style='color:#6b7280;font-size:13px;margin-top:20px;'>Admin dapat mengubah nilai radius ini kapan saja di menu <strong>Admin &rarr; Pengaturan</strong>.</p></div></body></html>";
+    } catch (\Throwable $e) {
+        return "<h1>Gagal Inisialisasi Radius</h1><p style='color:red;'>Error: " . $e->getMessage() . "</p>";
+    }
+});
+$routes->get('migrate-radius', function () {
+    return redirect()->to(base_url('api/migrate-radius'));
+});
+
 // Helper to restrict debug / maintenance / direct DDL migration endpoints
 $isAuthorizedDebug = function () {
     if (is_cli()) {

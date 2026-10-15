@@ -207,7 +207,9 @@ class Orders extends ResourceController
             if ($merchant && $merchant->latitude != null && $merchant->longitude != null) {
                 $pickupLat = $merchant->latitude;
                 $pickupLng = $merchant->longitude;
-                $radius = 15; // 15 KM
+                $radiusKey = $isMart ? 'search_radius_mart' : 'search_radius_food';
+                $radiusSetting = $db->table('settings')->where('setting_key', $radiusKey)->get()->getRow();
+                $radius = $radiusSetting ? (float)$radiusSetting->setting_value : 15.0;
 
                 $builder = $db->table('drivers');
                 $builder->select('drivers.*, (

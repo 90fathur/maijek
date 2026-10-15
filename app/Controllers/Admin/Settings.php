@@ -78,6 +78,13 @@ class Settings extends BaseController
             'whapify_api_secret' => $settingModel->where('setting_key', 'whapify_api_secret')->first(),
             'whapify_account_id' => $settingModel->where('setting_key', 'whapify_account_id')->first(),
             'fonnte_api_key' => $settingModel->where('setting_key', 'fonnte_api_key')->first(),
+
+            // Radius Radar Pencarian Driver Dinamis (KM)
+            'search_radius_ride'  => $settingModel->where('setting_key', 'search_radius_ride')->first(),
+            'search_radius_send'  => $settingModel->where('setting_key', 'search_radius_send')->first(),
+            'search_radius_titip' => $settingModel->where('setting_key', 'search_radius_titip')->first(),
+            'search_radius_food'  => $settingModel->where('setting_key', 'search_radius_food')->first(),
+            'search_radius_mart'  => $settingModel->where('setting_key', 'search_radius_mart')->first(),
         ];
 
         return view('admin/settings/index', $data);
@@ -155,6 +162,13 @@ class Settings extends BaseController
         $this->saveOrUpdateSetting($settingModel, 'whapify_api_secret', $this->request->getPost('whapify_api_secret'));
         $this->saveOrUpdateSetting($settingModel, 'whapify_account_id', $this->request->getPost('whapify_account_id'));
         $this->saveOrUpdateSetting($settingModel, 'fonnte_api_key', $this->request->getPost('fonnte_api_key'));
+
+        // Radius Radar Pencarian Driver Dinamis (KM) Update
+        $this->saveOrUpdateSetting($settingModel, 'search_radius_ride', $this->request->getPost('search_radius_ride'));
+        $this->saveOrUpdateSetting($settingModel, 'search_radius_send', $this->request->getPost('search_radius_send'));
+        $this->saveOrUpdateSetting($settingModel, 'search_radius_titip', $this->request->getPost('search_radius_titip'));
+        $this->saveOrUpdateSetting($settingModel, 'search_radius_food', $this->request->getPost('search_radius_food'));
+        $this->saveOrUpdateSetting($settingModel, 'search_radius_mart', $this->request->getPost('search_radius_mart'));
 
         $new_password = $this->request->getPost('new_password');
         if (!empty($new_password)) {

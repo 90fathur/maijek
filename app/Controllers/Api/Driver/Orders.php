@@ -62,22 +62,36 @@ class Orders extends ResourceController
             $builder->whereIn('orders.service_type', ['mobil', 'car', 'car_premium', 'mai_send_mobil', 'mai_titip_mobil']);
         }
 
-        // Urutkan dari yang terdekat
+        $settingModel = new \App\Models\SettingModel();
+        $radiusRide = (float)($settingModel->where('setting_key', 'search_radius_ride')->first()['setting_value'] ?? 5.0);
+        $radiusSend = (float)($settingModel->where('setting_key', 'search_radius_send')->first()['setting_value'] ?? 5.0);
+        $radiusTitip = (float)($settingModel->where('setting_key', 'search_radius_titip')->first()['setting_value'] ?? 5.0);
+        $maxRadius = max($radiusRide, $radiusSend, $radiusTitip);
+
+        // Ambil order dalam jangkauan terjauh radius yang aktif
+        $builder->having('distance_to_pickup <=', $maxRadius);
         $builder->orderBy('distance_to_pickup', 'ASC');
-        $builder->limit(10); // Ambil 10 terdekat
+        $builder->limit(20);
 
         $query = $builder->get();
         $orders = $query->getResultArray();
 
-        // Saring hanya pesanan yang jarak jemputnya kurang dari 5 KM
-        $filteredOrders = array_filter($orders, function ($o) {
-            return $o['distance_to_pickup'] <= 5;
+        // Saring setiap pesanan sesuai batas radius layanannya masing-masing
+        $filteredOrders = array_filter($orders, function ($o) use ($radiusRide, $radiusSend, $radiusTitip) {
+            $dist = (float)($o['distance_to_pickup'] ?? 999);
+            $sType = strtolower($o['service_type'] ?? '');
+            if (strpos($sType, 'titip') !== false) {
+                return $dist <= $radiusTitip;
+            }
+            if (strpos($sType, 'send') !== false) {
+                return $dist <= $radiusSend;
+            }
+            return $dist <= $radiusRide;
         });
 
         // Re-index array setelah filter
         $filteredOrders = array_values($filteredOrders);
 
-        $settingModel = new \App\Models\SettingModel();
         $feeSetting = $settingModel->where('setting_key', 'platform_fee')->first();
         $feeTypeSetting = $settingModel->where('setting_key', 'platform_fee_type')->first();
         $platformFee = $feeSetting ? (float)$feeSetting['setting_value'] : 8;

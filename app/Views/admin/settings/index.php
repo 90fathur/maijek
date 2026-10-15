@@ -354,6 +354,88 @@
             </div>
         </div>
     </div>
+
+    <!-- Radius Radar Pencarian Driver Dinamis -->
+    <div class="stats-grid" style="margin-top: 24px;">
+        <div class="card-table" style="padding: 32px; border-left: 4px solid var(--primary);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: var(--text-main);">
+                        <i class="fa-solid fa-radar" style="color: var(--primary); margin-right: 8px;"></i> Radius Radar Pencarian Driver (KM)
+                    </h2>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; margin-bottom: 0;">
+                        Tentukan jarak jangkauan maksimal (radius) pencarian driver terdekat saat ada pesanan masuk. Driver di luar radius ini tidak akan menerima notifikasi pesanan.
+                    </p>
+                </div>
+                <span style="background: #e0f2fe; color: #0284c7; padding: 4px 12px; border-radius: 99px; font-size: 0.75rem; font-weight: 700;">
+                    <i class="fa-solid fa-bolt"></i> Realtime & Dinamis
+                </span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                <!-- Mai-Ride -->
+                <div style="background: var(--bg-body); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+                        <i class="fa-solid fa-motorcycle" style="color: #2563eb;"></i> Mai-Ride (Motor & Mobil)
+                    </label>
+                    <div style="display: flex; align-items: center; background: white; border: 1.5px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                        <input type="number" step="0.5" min="1" max="100" name="search_radius_ride" value="<?= esc($search_radius_ride['setting_value'] ?? 5) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 1rem; font-weight: 700; color: var(--primary);" required>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">KM</span>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 6px;">Radius jemput penumpang. Standar: 5 KM.</small>
+                </div>
+
+                <!-- Mai-Send -->
+                <div style="background: var(--bg-body); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+                        <i class="fa-solid fa-box" style="color: #ea580c;"></i> Mai-Send (Kirim Paket)
+                    </label>
+                    <div style="display: flex; align-items: center; background: white; border: 1.5px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                        <input type="number" step="0.5" min="1" max="100" name="search_radius_send" value="<?= esc($search_radius_send['setting_value'] ?? 5) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 1rem; font-weight: 700; color: var(--primary);" required>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">KM</span>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 6px;">Radius jemput kurir barang. Standar: 5 KM.</small>
+                </div>
+
+                <!-- Mai-Titip -->
+                <div style="background: var(--bg-body); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+                        <i class="fa-solid fa-basket-shopping" style="color: #9333ea;"></i> Mai-Titip (Jastip Belanja)
+                    </label>
+                    <div style="display: flex; align-items: center; background: white; border: 1.5px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                        <input type="number" step="0.5" min="1" max="100" name="search_radius_titip" value="<?= esc($search_radius_titip['setting_value'] ?? 5) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 1rem; font-weight: 700; color: var(--primary);" required>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">KM</span>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 6px;">Radius kurir jastip. Standar: 5 KM.</small>
+                </div>
+
+                <!-- Mai-Food -->
+                <div style="background: var(--bg-body); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+                        <i class="fa-solid fa-bowl-food" style="color: #16a34a;"></i> Mai-Food (Resto / Kuliner)
+                    </label>
+                    <div style="display: flex; align-items: center; background: white; border: 1.5px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                        <input type="number" step="0.5" min="1" max="100" name="search_radius_food" value="<?= esc($search_radius_food['setting_value'] ?? 15) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 1rem; font-weight: 700; color: var(--primary);" required>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">KM</span>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 6px;">Radius kurir dari lokasi restoran. Standar: 15 KM.</small>
+                </div>
+
+                <!-- Mai-Mart -->
+                <div style="background: var(--bg-body); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+                        <i class="fa-solid fa-store" style="color: #0d9488;"></i> Mai-Mart (Toko / Sembako)
+                    </label>
+                    <div style="display: flex; align-items: center; background: white; border: 1.5px solid var(--border-color); border-radius: 8px; padding-right: 12px;">
+                        <input type="number" step="0.5" min="1" max="100" name="search_radius_mart" value="<?= esc($search_radius_mart['setting_value'] ?? 15) ?>" style="width: 100%; padding: 10px 12px; border: none; background: transparent; outline:none; font-size: 1rem; font-weight: 700; color: var(--primary);" required>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700;">KM</span>
+                    </div>
+                    <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 6px;">Radius kurir dari lokasi toko/mart. Standar: 15 KM.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="stats-grid" style="margin-top: 24px;">
         <div class="card-table" style="padding: 32px;">
             <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 24px;"><i class="fa-solid fa-coins" style="color: #F59E0B; margin-right: 8px;"></i> Cashback Koin (Loyalty Program)</h2>

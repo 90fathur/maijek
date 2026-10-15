@@ -179,6 +179,9 @@ class Orders extends BaseController
                     $pickupLat = $merchant->latitude;
                     $pickupLng = $merchant->longitude;
                     $targetVehicle = strtolower($order['vehicle_type'] ?? 'motor');
+                    $radiusKey = $isMart ? 'search_radius_mart' : 'search_radius_food';
+                    $radiusSetting = $db->table('settings')->where('setting_key', $radiusKey)->get()->getRow();
+                    $radius = $radiusSetting ? (float)$radiusSetting->setting_value : 15.0;
 
                     $builder = $db->table('drivers');
                     $builder->select("*, (6371 * acos(cos(radians($pickupLat)) * cos(radians(latitude)) * cos(radians(longitude) - radians($pickupLng)) + sin(radians($pickupLat)) * sin(radians(latitude)))) AS distance");
@@ -199,7 +202,7 @@ class Orders extends BaseController
                     } else {
                         $builder->whereIn('vehicle_type', ['motor', 'Motor', 'MOTOR']);
                     }
-                    $builder->having('distance <=', 15);
+                    $builder->having('distance <=', $radius);
                     $builder->orderBy('distance', 'ASC');
                     $builder->limit(20);
                     $drivers = $builder->get()->getResultArray();

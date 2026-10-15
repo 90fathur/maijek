@@ -60,6 +60,13 @@ class Settings extends BaseController
                 'driver_min_balance' => isset($data['driver_min_balance']) ? (int)$data['driver_min_balance'] : 10000,
                 'driver_promo_zero_balance_bypass' => isset($data['driver_promo_zero_balance_bypass']) ? (int)$data['driver_promo_zero_balance_bypass'] : 1,
                 'driver_min_withdraw' => isset($data['driver_min_withdraw']) ? (int)$data['driver_min_withdraw'] : 50000,
+
+                // Radius Radar Pencarian Driver Dinamis (KM)
+                'search_radius_ride'  => isset($data['search_radius_ride']) ? (float)$data['search_radius_ride'] : 5.0,
+                'search_radius_send'  => isset($data['search_radius_send']) ? (float)$data['search_radius_send'] : 5.0,
+                'search_radius_titip' => isset($data['search_radius_titip']) ? (float)$data['search_radius_titip'] : 5.0,
+                'search_radius_food'  => isset($data['search_radius_food']) ? (float)$data['search_radius_food'] : 15.0,
+                'search_radius_mart'  => isset($data['search_radius_mart']) ? (float)$data['search_radius_mart'] : 15.0,
             ]
         ], 200);
     }
