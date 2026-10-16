@@ -59,9 +59,9 @@ class Orders extends ResourceController
             }
         }
 
-        // Cek jika user masih punya pesanan aktif (pending/accepted/in_progress)
+        // Cek jika user masih punya pesanan aktif (pending/accepted/arrived/in_progress)
         $activeOrder = $orderModel->where('user_id', $payload['uid'])
-            ->whereIn('status', ['pending', 'accepted', 'in_progress'])
+            ->whereIn('status', ['pending', 'accepted', 'arrived', 'in_progress', 'on_trip'])
             ->first();
         if ($activeOrder) {
             return $this->respond(['status' => 400, 'message' => 'Anda masih memiliki pesanan aktif', 'data' => null], 400);

@@ -130,7 +130,7 @@ class Orders extends ResourceController
         $activeOrders = $orderModel->select('orders.*, users.name as user_name, users.phone as user_phone, users.photo as user_photo')
             ->join('users', 'users.id = orders.user_id')
             ->where('driver_id', $payload['uid'])
-            ->whereIn('orders.status', ['accepted', 'in_progress'])
+            ->whereIn('orders.status', ['accepted', 'arrived', 'in_progress', 'on_trip'])
             ->findAll();
 
         if (empty($activeOrders)) {
@@ -433,8 +433,8 @@ class Orders extends ResourceController
             return $this->respond(['status' => 400, 'message' => 'Pesanan ini sudah dibatalkan sebelumnya.'], 400);
         }
 
-        // Validasi Alur Status: Selesai hanya boleh jika status saat ini aktif (arrived / in_progress)
-        if ($newStatus == 'completed' && !in_array($order['status'], ['accepted', 'arrived', 'in_progress'])) {
+        // Validasi Alur Status: Selesai hanya boleh jika status saat ini aktif (arrived / in_progress / on_trip)
+        if ($newStatus == 'completed' && !in_array($order['status'], ['accepted', 'arrived', 'in_progress', 'on_trip'])) {
             return $this->respond(['status' => 400, 'message' => 'Status pesanan tidak valid untuk diselesaikan.'], 400);
         }
 
@@ -732,10 +732,13 @@ class Orders extends ResourceController
         $builder = $orderModel->select('orders.*, users.name as user_name, users.phone as user_phone, users.photo as user_photo')
             ->join('users', 'users.id = orders.user_id')
             ->where('driver_id', $payload['uid'])
-            ->whereIn('orders.status', ['completed', 'cancelled']);
+            ->whereIn('orders.status', ['accepted', 'arrived', 'in_progress', 'on_trip', 'completed', 'cancelled']);
 
         if ($dateFilter) {
-            $builder->where('DATE(orders.created_at)', $dateFilter);
+            $builder->groupStart()
+                ->where('DATE(orders.created_at)', $dateFilter)
+                ->orWhereIn('orders.status', ['accepted', 'arrived', 'in_progress', 'on_trip'])
+                ->groupEnd();
         }
 
         $history = $builder->orderBy('orders.created_at', 'DESC')
@@ -757,10 +760,13 @@ class Orders extends ResourceController
             ->join('users', 'users.id = food_orders.user_id')
             ->join('merchants', 'merchants.id = food_orders.merchant_id')
             ->where('food_orders.driver_id', $payload['uid'])
-            ->whereIn('food_orders.status', ['completed', 'cancelled']);
+            ->whereIn('food_orders.status', ['driver_assigned', 'accepted', 'driver_at_merchant', 'delivering', 'in_progress', 'completed', 'cancelled']);
 
         if ($dateFilter) {
-            $foodBuilder->where('DATE(food_orders.created_at)', $dateFilter);
+            $foodBuilder->groupStart()
+                ->where('DATE(food_orders.created_at)', $dateFilter)
+                ->orWhereIn('food_orders.status', ['driver_assigned', 'accepted', 'driver_at_merchant', 'delivering', 'in_progress'])
+                ->groupEnd();
         }
 
         $foodOrdersRaw = $foodBuilder->orderBy('food_orders.created_at', 'DESC')->findAll();
@@ -780,6 +786,7 @@ class Orders extends ResourceController
                 'user_id' => $fo['user_id'],
                 'driver_id' => $fo['driver_id'],
                 'type' => 'food',
+                'order_type' => $fo['order_type'] ?? 'food',
                 'pickup_address' => $fo['merchant_name'],
                 'dropoff_address' => $fo['delivery_address'],
                 'distance' => $fo['distance'] ?? 0,
@@ -799,9 +806,15 @@ class Orders extends ResourceController
             ];
         }
 
-        // Gabungkan dan urutkan
+        // Gabungkan dan urutkan: Pesanan aktif selalu diprioritaskan di paling atas
         $allHistory = array_merge($history, $foodOrders);
         usort($allHistory, function ($a, $b) {
+            $activeList = ['accepted', 'arrived', 'in_progress', 'on_trip', 'driver_assigned', 'driver_at_merchant', 'delivering'];
+            $activeA = in_array($a['status'], $activeList) ? 1 : 0;
+            $activeB = in_array($b['status'], $activeList) ? 1 : 0;
+            if ($activeA !== $activeB) {
+                return $activeB - $activeA;
+            }
             return strtotime($b['created_at']) - strtotime($a['created_at']);
         });
 
