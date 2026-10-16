@@ -82,7 +82,7 @@ class FcmService
         if (!$channelId) {
             // Gunakan nada dering pesanan masuk HANYA untuk notifikasi pesanan baru
             if ($isNewOrderAlert) {
-                $channelId = 'maifood_order_channel_v2';
+                $channelId = 'maifood_order_channel_v3';
                 $sound = 'order_ringtone';
             } else {
                 // Untuk selain pesanan baru (broadcast, promo, pengumuman, chat) selalu gunakan nada dering standar
@@ -195,8 +195,8 @@ class FcmService
         $target = $data['target'] ?? '';
         $type = $data['type'] ?? '';
         $isNewOrderAlert = in_array($type, ['new_order', 'new_food_order', 'driver_order_request', 'merchant_new_order', 'new_mart_order']);
-        $channelId = $data['channel_id'] ?? ($isNewOrderAlert ? 'maifood_order_channel_v2' : 'high_importance_channel');
-        $sound = ($channelId === 'maifood_order_channel_v2') ? 'order_ringtone' : 'default';
+        $channelId = $data['channel_id'] ?? ($isNewOrderAlert ? 'maifood_order_channel_v3' : 'high_importance_channel');
+        $sound = ($channelId === 'maifood_order_channel_v3') ? 'order_ringtone' : 'default';
 
         $androidNotification = [
             'default_vibrate_timings' => true,
@@ -314,8 +314,8 @@ class FcmService
         $target = $data['target'] ?? '';
         $type = $data['type'] ?? '';
         $isNewOrderAlert = in_array($type, ['new_order', 'new_food_order', 'driver_order_request', 'merchant_new_order']);
-        $channelId = $data['channel_id'] ?? ($isNewOrderAlert ? 'maifood_order_channel_v2' : 'high_importance_channel');
-        $sound = ($channelId === 'maifood_order_channel_v2') ? 'order_ringtone' : 'default';
+        $channelId = $data['channel_id'] ?? ($isNewOrderAlert ? 'maifood_order_channel_v3' : 'high_importance_channel');
+        $sound = ($channelId === 'maifood_order_channel_v3') ? 'order_ringtone' : 'default';
 
         $payload = [
             'message' => [
