@@ -79,10 +79,10 @@ class PriorityDispatchService
         $builder->where('fcm_token !=', null);
         $builder->where('fcm_token !=', '');
 
-        // Filter Heartbeat agar tidak kirim ke driver offline/zombie
+        // Filter Heartbeat agar tidak kirim ke driver offline/zombie (toleransi 90 menit untuk driver mangkal)
         try {
             if ($this->db->fieldExists('last_heartbeat_at', 'drivers')) {
-                $builder->where('last_heartbeat_at >=', date('Y-m-d H:i:s', strtotime('-15 minutes')));
+                $builder->where('last_heartbeat_at >=', date('Y-m-d H:i:s', strtotime('-90 minutes')));
             }
         } catch (\Throwable $e) {}
 
