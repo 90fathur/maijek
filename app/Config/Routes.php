@@ -181,6 +181,48 @@ $routes->get('fix-negative-balances', function () {
     return redirect()->to(base_url('api/fix-negative-balances'));
 });
 
+// ==== LINK MIGRASI DATABASE ONLINE (STATUS ORDER ARRIVED & TIMESTAMPS) ====
+$routes->get('api/migrate-order-status', function () {
+    try {
+        $db = \Config\Database::connect();
+        $messages = [];
+
+        // 1. Update status ENUM to include 'arrived'
+        try {
+            $db->query("ALTER TABLE orders MODIFY COLUMN status ENUM('pending', 'accepted', 'arrived', 'in_progress', 'on_trip', 'completed', 'cancelled') DEFAULT 'pending';");
+            $messages[] = "Kolom <code>status</code> ENUM berhasil diperbarui (mendukung <code>arrived</code>).";
+        } catch (\Throwable $e) {
+            $messages[] = "Status ENUM: " . $e->getMessage();
+        }
+
+        // 2. Tambah kolom timestamps jika belum ada
+        $cols = [
+            'accepted_at'    => "ALTER TABLE orders ADD COLUMN accepted_at DATETIME NULL AFTER driver_id;",
+            'arrived_at'     => "ALTER TABLE orders ADD COLUMN arrived_at DATETIME NULL AFTER status;",
+            'in_progress_at' => "ALTER TABLE orders ADD COLUMN in_progress_at DATETIME NULL AFTER status;",
+            'completed_at'   => "ALTER TABLE orders ADD COLUMN completed_at DATETIME NULL AFTER status;",
+        ];
+
+        foreach ($cols as $col => $sql) {
+            if (!$db->fieldExists($col, 'orders')) {
+                $db->query($sql);
+                $messages[] = "Kolom <code>{$col}</code> berhasil ditambahkan ke tabel <code>orders</code>.";
+            } else {
+                $messages[] = "Kolom <code>{$col}</code> sudah ada pada tabel <code>orders</code>.";
+            }
+        }
+
+        $htmlMessages = "<li>" . implode("</li><li>", $messages) . "</li>";
+        return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Migrasi Status Pesanan</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:40px 20px;display:flex;justify-content:center;} .card{background:#fff;max-width:580px;width:100%;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,0.08);padding:32px;} h2{color:#059669;margin-top:0;} ul{background:#f9fafb;border-radius:10px;padding:16px 20px 16px 36px;border:1px solid #e5e7eb;line-height:1.7;} code{background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:600;}</style></head><body><div class='card'><h2><span>🎉</span> Migrasi Status Pesanan Selesai!</h2><p>Struktur database untuk status <strong>Arrived</strong> dan timestamps alur pesanan telah siap 100%.</p><ul>$htmlMessages</ul><p style='color:#6b7280;font-size:13px;'>Tombol <i>Saya Sudah Tiba di Toko</i> kini dapat ditekan dengan normal tanpa error.</p></div></body></html>";
+    } catch (\Throwable $e) {
+        return "<h1>Gagal Migrasi Status Pesanan</h1><p style='color:red;'>Error: " . $e->getMessage() . "</p>";
+    }
+});
+$routes->get('migrate-order-status', function () {
+    return redirect()->to(base_url('api/migrate-order-status'));
+});
+
+
 
 // Helper to restrict debug / maintenance / direct DDL migration endpoints
 $isAuthorizedDebug = function () {

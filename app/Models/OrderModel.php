@@ -40,6 +40,8 @@ class OrderModel extends Model
         'titip_item_price',
         'titip_receipt_img',
         'titip_total_cost',
+        'accepted_at',
+        'arrived_at',
         'in_progress_at',
         'completed_at',
         'cancel_reason',

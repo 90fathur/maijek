@@ -297,6 +297,14 @@ class Orders extends ResourceController
         $db->transStart();
 
         // Anti-Race Condition: Kunci pesanan hanya jika statusnya benar-benar masih 'pending' dan belum memiliki supir di Database detik ini
+        $acceptUpdate = [
+            'driver_id' => $payload['uid'],
+            'status' => 'accepted'
+        ];
+        if ($db->fieldExists('accepted_at', 'orders')) {
+            $acceptUpdate['accepted_at'] = date('Y-m-d H:i:s');
+        }
+
         $db->table('orders')
             ->where('id', $orderId)
             ->where('status', 'pending')
@@ -305,11 +313,7 @@ class Orders extends ResourceController
             ->orWhere('driver_id', 0)
             ->orWhere('driver_id', '')
             ->groupEnd()
-            ->update([
-                'driver_id' => $payload['uid'],
-                'status' => 'accepted',
-                'accepted_at' => date('Y-m-d H:i:s')
-            ]);
+            ->update($acceptUpdate);
 
         // Cek apakah update berhasil (artinya pesanan belum diambil orang lain)
         if ($db->affectedRows() == 0) {
@@ -434,26 +438,40 @@ class Orders extends ResourceController
             return $this->respond(['status' => 400, 'message' => 'Status pesanan tidak valid untuk diselesaikan.'], 400);
         }
 
+        $db = \Config\Database::connect();
+
+        // Pastikan ENUM status di DB mendukung 'arrived' secara aman
+        try {
+            $db->query("ALTER TABLE orders MODIFY COLUMN status ENUM('pending', 'accepted', 'arrived', 'in_progress', 'on_trip', 'completed', 'cancelled') DEFAULT 'pending'");
+        } catch (\Throwable $e) {}
+
         $updateData = ['status' => $newStatus];
         $reason = $this->request->getVar('reason');
 
         if ($newStatus == 'arrived') {
-            $updateData['arrived_at'] = date('Y-m-d H:i:s');
+            if ($db->fieldExists('arrived_at', 'orders')) {
+                $updateData['arrived_at'] = date('Y-m-d H:i:s');
+            }
         } elseif ($newStatus == 'in_progress') {
-            $updateData['in_progress_at'] = date('Y-m-d H:i:s');
+            if ($db->fieldExists('in_progress_at', 'orders')) {
+                $updateData['in_progress_at'] = date('Y-m-d H:i:s');
+            }
         } elseif ($newStatus == 'completed') {
-            $updateData['completed_at'] = date('Y-m-d H:i:s');
+            if ($db->fieldExists('completed_at', 'orders')) {
+                $updateData['completed_at'] = date('Y-m-d H:i:s');
+            }
 
             // Khusus Mai-Titip, jika driver memasukkan total struk belanja
             $titipCost = $this->request->getVar('titip_total_cost');
-            if ($titipCost) {
+            if ($titipCost && $db->fieldExists('titip_total_cost', 'orders')) {
                 $updateData['titip_total_cost'] = $titipCost;
             }
         } elseif ($newStatus == 'cancelled' && $reason) {
-            $updateData['cancel_reason'] = $reason;
+            if ($db->fieldExists('cancel_reason', 'orders')) {
+                $updateData['cancel_reason'] = $reason;
+            }
         }
 
-        $db = \Config\Database::connect();
         $db->transStart();
 
         // Kunci baris status order secara atomik (Anti-Race Condition)
@@ -465,8 +483,11 @@ class Orders extends ResourceController
             ->update($updateData);
 
         if ($affected === 0) {
-            $db->transRollback();
-            return $this->respond(['status' => 400, 'message' => 'Pesanan telah diproses oleh transaksi lain.'], 400);
+            $currentCheck = $db->table('orders')->select('status')->where('id', $orderId)->get()->getRow();
+            if (!$currentCheck || $currentCheck->status !== $newStatus) {
+                $db->transRollback();
+                return $this->respond(['status' => 400, 'message' => 'Pesanan telah diproses oleh transaksi lain atau sudah tidak aktif.'], 400);
+            }
         }
 
         // Jika selesai atau dibatalkan, update saldo secara atomik
@@ -567,7 +588,9 @@ class Orders extends ResourceController
         $db->transComplete();
 
         if ($db->transStatus() === false) {
-            return $this->respond(['status' => 500, 'message' => 'Gagal memproses pembaruan status pesanan.'], 500);
+            $dbErr = $db->error();
+            log_message('error', 'Orders updateStatus DB Error: ' . json_encode($dbErr));
+            return $this->respond(['status' => 500, 'message' => 'Gagal memproses pembaruan status pesanan: ' . ($dbErr['message'] ?? 'Database error')], 500);
         }
 
         if ($newStatus == 'completed') {
