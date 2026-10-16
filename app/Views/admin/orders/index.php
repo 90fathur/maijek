@@ -279,7 +279,15 @@
                                         <button type="button" onclick="openOrderDetail('food', <?= $order['id'] ?>)" style="padding: 5px 10px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(2, 132, 199, 0.2);" title="Lihat Rincian Lengkap">
                                             <i class="fa-solid fa-eye"></i> Detail
                                         </button>
-                                        <?php if (in_array($order['status'], ['pending', 'processing', 'ready', 'accepted_by_driver', 'in_progress'])): ?>
+                                        <?php if (in_array($order['status'], ['driver_assigned', 'accepted_by_merchant', 'accepted_by_driver', 'driver_at_merchant', 'delivering', 'in_progress', 'processing', 'ready'])): ?>
+                                            <form action="<?= base_url('admin/orders/complete/maifood/' . $order['id']) ?>" method="post" onsubmit="return confirm('Selesaikan pesanan MaiFood #ORD-<?= str_pad($order['id'], 4, '0', STR_PAD_LEFT) ?> ini secara manual oleh Admin?');" style="margin: 0;">
+                                                <?= csrf_field() ?>
+                                                <button type="submit" style="padding: 5px 9px; background: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(5, 150, 105, 0.2);" title="Selesaikan Pesanan Manual">
+                                                    <i class="fa-solid fa-circle-check"></i> Selesai
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                        <?php if (in_array($order['status'], ['pending', 'processing', 'ready', 'accepted_by_merchant', 'accepted_by_driver', 'driver_assigned', 'driver_at_merchant', 'delivering', 'in_progress'])): ?>
                                             <form action="<?= base_url('admin/orders/cancel/maifood/' . $order['id']) ?>" method="post" onsubmit="return confirm('Yakin ingin membatalkan pesanan MaiFood ini secara paksa?');" style="margin: 0;">
                                                 <?= csrf_field() ?>
                                                 <button type="submit" style="padding: 5px 9px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Batalkan Pesanan Paksa">
@@ -471,8 +479,16 @@
                                         <button type="button" onclick="openOrderDetail('ride', <?= $order['id'] ?>)" style="padding: 5px 10px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(2, 132, 199, 0.2);" title="Lihat Rincian Lengkap">
                                             <i class="fa-solid fa-eye"></i> Detail
                                         </button>
-                                        <?php if (in_array($order['status'], ['pending', 'accepted', 'in_progress'])): ?>
-                                            <form action="<?= base_url('admin/orders/cancel/mairide/' . $order['id']) ?>" method="post" onsubmit="return confirm('Yakin ingin membatalkan pesanan ini secara paksa?');" style="margin: 0;">
+                                        <?php if (in_array($order['status'], ['accepted', 'arrived', 'in_progress', 'on_trip'])): ?>
+                                            <form action="<?= base_url('admin/orders/complete/mairide/' . $order['id']) ?>" method="post" onsubmit="return confirm('Selesaikan pesanan #ORD-<?= str_pad($order['id'], 4, '0', STR_PAD_LEFT) ?> ini secara manual oleh Admin?\n\nStatus akan menjadi SELESAI, hak pendapatan driver akan disinkronkan, dan pelanggan akan menerima notifikasi.');" style="margin: 0;">
+                                                <?= csrf_field() ?>
+                                                <button type="submit" style="padding: 5px 9px; background: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(5, 150, 105, 0.2);" title="Selesaikan Pesanan Manual">
+                                                    <i class="fa-solid fa-circle-check"></i> Selesai
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                        <?php if (in_array($order['status'], ['pending', 'accepted', 'arrived', 'in_progress', 'on_trip'])): ?>
+                                            <form action="<?= base_url('admin/orders/cancel/mairide/' . $order['id']) ?>" method="post" onsubmit="return confirm('Yakin ingin membatalkan pesanan #ORD-<?= str_pad($order['id'], 4, '0', STR_PAD_LEFT) ?> ini secara paksa?');" style="margin: 0;">
                                                 <?= csrf_field() ?>
                                                 <button type="submit" style="padding: 5px 9px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Batalkan Pesanan Paksa">
                                                     <i class="fa-solid fa-ban"></i> Batal

@@ -238,13 +238,250 @@ class Orders extends BaseController
         exit;
     }
 
+    public function complete($type, $id)
+    {
+        $db = \Config\Database::connect();
+        $fcmService = new \App\Libraries\FcmService();
+
+        if ($type === 'maifood' || $type === 'food') {
+            $order = $db->table('food_orders')->where('id', $id)->get()->getRowArray();
+            if (!$order) {
+                session()->setFlashdata('error', 'Pesanan MaiFood tidak ditemukan.');
+                return redirect()->to('/admin/orders?tab=food');
+            }
+
+            if ($order['status'] === 'completed') {
+                session()->setFlashdata('error', 'Pesanan ini sudah selesai sebelumnya.');
+                return redirect()->to('/admin/orders?tab=food');
+            }
+
+            if ($order['status'] === 'cancelled') {
+                session()->setFlashdata('error', 'Pesanan ini sudah dibatalkan sebelumnya.');
+                return redirect()->to('/admin/orders?tab=food');
+            }
+
+            $db->transStart();
+
+            // Update order status to completed
+            $db->table('food_orders')->where('id', $id)->update(['status' => 'completed']);
+
+            // Selesaikan hak saldo driver & merchant jika ada driver yang bertugas
+            if (!empty($order['driver_id'])) {
+                $settingModel = new \App\Models\SettingModel();
+                $feeSetting = $settingModel->where('setting_key', 'food_platform_fee')->first();
+                $feeTypeSetting = $settingModel->where('setting_key', 'food_platform_fee_type')->first();
+
+                $platformFee = $feeSetting ? (float)$feeSetting['setting_value'] : 15;
+                $platformFeeType = $feeTypeSetting ? $feeTypeSetting['setting_value'] : 'percent';
+
+                $komisi = 0;
+                if ($platformFeeType == 'percent') {
+                    $komisi = (float)$order['delivery_fee'] * ($platformFee / 100);
+                } else {
+                    $komisi = $platformFee;
+                }
+
+                if ($order['payment_method'] === 'maipay') {
+                    $driverEarn = (float)$order['delivery_fee'] - $komisi;
+                    $db->table('drivers')->where('id', $order['driver_id'])->set('balance', 'balance + ' . $driverEarn, false)->update();
+
+                    if ($db->tableExists('transactions')) {
+                        $db->table('transactions')->insert([
+                            'driver_id'   => $order['driver_id'],
+                            'user_id'     => $order['user_id'],
+                            'type'        => 'credit',
+                            'amount'      => (int)round($driverEarn),
+                            'description' => "Pendapatan Ongkir Food #{$id} diselesaikan Admin (Ongkir Rp " . number_format($order['delivery_fee'], 0, ',', '.') . " - Fee Rp " . number_format($komisi, 0, ',', '.') . ")",
+                            'created_at'  => date('Y-m-d H:i:s'),
+                            'updated_at'  => date('Y-m-d H:i:s'),
+                        ]);
+                    }
+
+                    if (!empty($order['merchant_id'])) {
+                        $db->table('merchants')->where('id', $order['merchant_id'])->set('balance', 'balance + ' . $order['food_total'], false)->update();
+                    }
+                } else if ($order['payment_method'] === 'split_delivery_maipay') {
+                    $driverEarn = (float)$order['delivery_fee'] - $komisi;
+                    $discountSubsidi = (float)($order['discount_amount'] ?? 0);
+                    $totalCredit = $driverEarn + $discountSubsidi;
+
+                    if ($totalCredit > 0) {
+                        $db->table('drivers')->where('id', $order['driver_id'])->set('balance', 'balance + ' . $totalCredit, false)->update();
+
+                        if ($db->tableExists('transactions')) {
+                            $db->table('transactions')->insert([
+                                'driver_id'   => $order['driver_id'],
+                                'user_id'     => $order['user_id'],
+                                'type'        => 'credit',
+                                'amount'      => (int)round($totalCredit),
+                                'description' => "Pendapatan Ongkir Split Food #{$id} diselesaikan Admin",
+                                'created_at'  => date('Y-m-d H:i:s'),
+                                'updated_at'  => date('Y-m-d H:i:s'),
+                            ]);
+                        }
+                    }
+                } else {
+                    // Tunai
+                    $discountSubsidi = (float)($order['discount_amount'] ?? 0);
+                    $netAdjustment = $discountSubsidi - $komisi;
+                    if ($netAdjustment >= 0) {
+                        $db->table('drivers')->where('id', $order['driver_id'])->set('balance', 'balance + ' . $netAdjustment, false)->update();
+                    } else {
+                        $targetDeduction = abs($netAdjustment);
+                        $db->table('drivers')->where('id', $order['driver_id'])->set('balance', 'GREATEST(0, balance - ' . (float)$targetDeduction . ')', false)->update();
+                    }
+                }
+            }
+
+            $db->transComplete();
+
+            try {
+                $fcmService->sendToUserWithInbox(
+                    $order['user_id'],
+                    'Pesanan Selesai! 🎉',
+                    'Pesanan makanan/mart Anda telah diselesaikan oleh Admin.',
+                    ['type' => 'food_order_status', 'order_id' => $id, 'status' => 'completed']
+                );
+                if (!empty($order['driver_id'])) {
+                    $fcmService->sendToDriver(
+                        $order['driver_id'],
+                        'Pesanan Selesai! ✅',
+                        'Pesanan #' . $id . ' telah ditandai selesai oleh Admin.',
+                        ['type' => 'food_order_status', 'order_id' => $id, 'status' => 'completed']
+                    );
+                }
+            } catch (\Throwable $e) {}
+
+            session()->setFlashdata('success', 'Pesanan MaiFood #ORD-' . str_pad($id, 4, '0', STR_PAD_LEFT) . ' berhasil diselesaikan oleh Admin.');
+            return redirect()->to('/admin/orders?tab=food');
+        } else {
+            // MaiRide / MaiCar / MaiSend / MaiTitip
+            $order = $db->table('orders')->where('id', $id)->get()->getRowArray();
+            if (!$order) {
+                session()->setFlashdata('error', 'Pesanan tidak ditemukan.');
+                return redirect()->to('/admin/orders?tab=ride');
+            }
+
+            if ($order['status'] === 'completed') {
+                session()->setFlashdata('error', 'Pesanan ini sudah selesai sebelumnya.');
+                return redirect()->to('/admin/orders?tab=ride');
+            }
+
+            if ($order['status'] === 'cancelled') {
+                session()->setFlashdata('error', 'Pesanan ini sudah dibatalkan sebelumnya.');
+                return redirect()->to('/admin/orders?tab=ride');
+            }
+
+            $db->transStart();
+
+            $updateData = ['status' => 'completed'];
+            if ($db->fieldExists('completed_at', 'orders')) {
+                $updateData['completed_at'] = date('Y-m-d H:i:s');
+            }
+
+            $db->table('orders')->where('id', $id)->update($updateData);
+
+            if (!empty($order['driver_id'])) {
+                $driverId = $order['driver_id'];
+                $settingModel = new \App\Models\SettingModel();
+                $feeSetting = $settingModel->where('setting_key', 'platform_fee')->first();
+                $feeTypeSetting = $settingModel->where('setting_key', 'platform_fee_type')->first();
+
+                $platformFee = $feeSetting ? (float)$feeSetting['setting_value'] : 8;
+                $platformFeeType = $feeTypeSetting ? $feeTypeSetting['setting_value'] : 'percent';
+
+                $discountSubsidi = (float)($order['discount_amount'] ?? 0);
+                $originalFare = (float)$order['price'] + $discountSubsidi;
+
+                $komisi = 0;
+                if ($platformFeeType == 'percent') {
+                    $komisi = round($originalFare * ($platformFee / 100));
+                } else {
+                    $komisi = round($platformFee);
+                }
+
+                if ($order['payment_method'] === 'maipay') {
+                    $driverEarn = (float)($originalFare - $komisi);
+                    $db->table('drivers')->where('id', $driverId)->set('balance', 'balance + ' . (float)$driverEarn, false)->update();
+
+                    if ($db->tableExists('transactions')) {
+                        $db->table('transactions')->insert([
+                            'driver_id'   => $driverId,
+                            'user_id'     => $order['user_id'],
+                            'type'        => 'credit',
+                            'amount'      => (int)round($driverEarn),
+                            'description' => "Pendapatan Order #{$id} diselesaikan Admin (Tarif Rp " . number_format($originalFare, 0, ',', '.') . " - Fee Rp " . number_format($komisi, 0, ',', '.') . ")",
+                            'created_at'  => date('Y-m-d H:i:s'),
+                            'updated_at'  => date('Y-m-d H:i:s'),
+                        ]);
+                    }
+                } else if ($order['payment_method'] === 'cash') {
+                    $netAdjustment = (float)($discountSubsidi - $komisi);
+                    if ($netAdjustment >= 0) {
+                        $db->table('drivers')->where('id', $driverId)->set('balance', 'balance + ' . (float)$netAdjustment, false)->update();
+                        if ($netAdjustment > 0 && $db->tableExists('transactions')) {
+                            $db->table('transactions')->insert([
+                                'driver_id'   => $driverId,
+                                'user_id'     => $order['user_id'],
+                                'type'        => 'credit',
+                                'amount'      => (int)round($netAdjustment),
+                                'description' => "Subsidi Promo Order #{$id} diselesaikan Admin",
+                                'created_at'  => date('Y-m-d H:i:s'),
+                                'updated_at'  => date('Y-m-d H:i:s'),
+                            ]);
+                        }
+                    } else {
+                        $targetDeduction = abs((float)$netAdjustment);
+                        $db->table('drivers')->where('id', $driverId)
+                            ->set('balance', 'GREATEST(0, balance - ' . (float)$targetDeduction . ')', false)
+                            ->update();
+
+                        if ($db->tableExists('transactions')) {
+                            $db->table('transactions')->insert([
+                                'driver_id'   => $driverId,
+                                'user_id'     => $order['user_id'],
+                                'type'        => 'debit',
+                                'amount'      => (int)round($targetDeduction),
+                                'description' => "Potongan Fee Order #{$id} diselesaikan Admin",
+                                'created_at'  => date('Y-m-d H:i:s'),
+                                'updated_at'  => date('Y-m-d H:i:s'),
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            $db->transComplete();
+
+            try {
+                $fcmService->sendToUserWithInbox(
+                    $order['user_id'],
+                    'Pesanan Selesai! 🎉',
+                    'Pesanan Anda telah diselesaikan oleh Admin.',
+                    ['type' => 'order_status', 'order_id' => $id, 'status' => 'completed']
+                );
+                if (!empty($order['driver_id'])) {
+                    $fcmService->sendToDriver(
+                        $order['driver_id'],
+                        'Pesanan Selesai! ✅',
+                        'Pesanan #' . $id . ' telah ditandai selesai oleh Admin.',
+                        ['type' => 'order_status', 'order_id' => $id, 'status' => 'completed']
+                    );
+                }
+            } catch (\Throwable $e) {}
+
+            session()->setFlashdata('success', 'Pesanan #ORD-' . str_pad($id, 4, '0', STR_PAD_LEFT) . ' berhasil diselesaikan oleh Admin.');
+            return redirect()->to('/admin/orders?tab=ride');
+        }
+    }
+
     public function forceCancel($type, $id)
     {
         $db = \Config\Database::connect();
 
-        if ($type == 'maifood') {
+        if ($type == 'maifood' || $type == 'food') {
             $order = $db->table('food_orders')->where('id', $id)->get()->getRow();
-            if ($order && in_array($order->status, ['pending', 'processing', 'ready', 'accepted_by_driver', 'in_progress'])) {
+            if ($order && in_array($order->status, ['pending', 'processing', 'ready', 'accepted_by_merchant', 'accepted_by_driver', 'driver_assigned', 'driver_at_merchant', 'delivering', 'in_progress'])) {
                 $db->table('food_orders')->where('id', $id)->update(['status' => 'cancelled']);
 
                 // Refund Mai-Pay (Penuh atau Split Ongkir)
@@ -259,7 +496,7 @@ class Orders extends BaseController
             return redirect()->to('/admin/orders?tab=food');
         } else {
             $order = $db->table('orders')->where('id', $id)->get()->getRow();
-            if ($order && in_array($order->status, ['pending', 'accepted', 'in_progress'])) {
+            if ($order && in_array($order->status, ['pending', 'accepted', 'arrived', 'in_progress', 'on_trip'])) {
                 $db->table('orders')->where('id', $id)->update(['status' => 'cancelled']);
 
                 // Refund Mai-Pay

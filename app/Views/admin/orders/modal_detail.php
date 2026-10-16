@@ -192,7 +192,8 @@
         </div>
 
         <!-- Footer Modal -->
-        <div style="padding: 14px 24px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; align-items: center; background: #f8fafc;">
+        <div style="padding: 14px 24px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+            <div id="modalActionButtons" style="display: flex; gap: 8px;"></div>
             <button type="button" onclick="closeOrderDetail()" style="padding: 8px 20px; background: #e2e8f0; color: #334155; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.15s;" onmouseover="this.style.background='#cbd5e1'" onmouseout="this.style.background='#e2e8f0'">
                 Tutup
             </button>
@@ -517,6 +518,40 @@ function populateOrderDetailModal(d, type) {
         document.getElementById('modalReviewComment').innerText = commentVal ? `"${commentVal}"` : 'Pelanggan tidak memberikan komentar teks.';
     } else {
         reviewSec.style.display = 'none';
+    }
+
+    // Tombol Aksi Modal (Selesaikan & Batalkan Pesanan oleh Admin)
+    const modalActionBox = document.getElementById('modalActionButtons');
+    if (modalActionBox) {
+        modalActionBox.innerHTML = '';
+        const orderStatus = (d.status || '').toLowerCase();
+        const activeStatuses = ['accepted', 'arrived', 'in_progress', 'on_trip', 'driver_assigned', 'accepted_by_driver', 'driver_at_merchant', 'delivering', 'processing', 'ready'];
+
+        if (activeStatuses.includes(orderStatus)) {
+            const isFood = (type === 'food' || type === 'maifood');
+            const completeUrl = isFood
+                ? `<?= base_url('admin/orders/complete/maifood') ?>/${d.id}`
+                : `<?= base_url('admin/orders/complete/mairide') ?>/${d.id}`;
+            const cancelUrl = isFood
+                ? `<?= base_url('admin/orders/cancel/maifood') ?>/${d.id}`
+                : `<?= base_url('admin/orders/cancel/mairide') ?>/${d.id}`;
+            const csrfToken = `<?= csrf_field() ?>`;
+
+            modalActionBox.innerHTML = `
+                <form action="${completeUrl}" method="post" onsubmit="return confirm('Selesaikan pesanan #${d.id} ini secara manual oleh Admin?');" style="margin: 0; display: inline-block;">
+                    ${csrfToken}
+                    <button type="submit" style="padding: 7px 14px; background: #059669; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 0.82rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 2px rgba(5, 150, 105, 0.2);">
+                        <i class="fa-solid fa-circle-check"></i> Selesaikan Pesanan
+                    </button>
+                </form>
+                <form action="${cancelUrl}" method="post" onsubmit="return confirm('Batalkan pesanan #${d.id} ini secara paksa?');" style="margin: 0; display: inline-block;">
+                    ${csrfToken}
+                    <button type="submit" style="padding: 7px 14px; background: #ef4444; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 0.82rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="fa-solid fa-ban"></i> Batalkan
+                    </button>
+                </form>
+            `;
+        }
     }
 }
 </script>

@@ -885,6 +885,7 @@ $routes->group('admin', ['namespace' => 'App\Controllers\Admin', 'filter' => 'ad
     $routes->get('orders/exportCsv/(:segment)', 'Orders::exportCsv/$1');
     $routes->get('orders/detail/(:segment)/(:num)', 'Orders::detail/$1/$2');
     $routes->post('orders/cancel/(:segment)/(:num)', 'Orders::forceCancel/$1/$2');
+    $routes->post('orders/complete/(:segment)/(:num)', 'Orders::complete/$1/$2');
 
     // Settings
     $routes->get('settings', 'Settings::index');
