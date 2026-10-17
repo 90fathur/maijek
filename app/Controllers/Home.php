@@ -109,6 +109,24 @@ class Home extends BaseController
         $dbTime = $db->query("SELECT NOW() as db_time")->getRow()->db_time;
         echo "Current DB Time (MySQL): " . $dbTime . "<br><br>";
 
+        echo "<h2>Merchants Status (Live Server)</h2>";
+        $merchants = $db->table('merchants')->get()->getResultArray();
+        echo "<table border='1' cellpadding='5' style='border-collapse: collapse;'>";
+        echo "<tr><th>ID</th><th>Nama</th><th>Phone</th><th>is_open</th><th>Verification</th><th>Hours</th><th>Days</th><th>Last Active</th></tr>";
+        foreach ($merchants as $m) {
+            echo "<tr>";
+            echo "<td>{$m['id']}</td>";
+            echo "<td><b>" . htmlspecialchars($m['name']) . "</b></td>";
+            echo "<td>{$m['phone']}</td>";
+            echo "<td style='background:" . ($m['is_open'] == 1 ? '#dcfce7' : '#fee2e2') . "'><b>" . ($m['is_open'] == 1 ? 'BUKA (1)' : 'TUTUP (0)') . "</b></td>";
+            echo "<td>" . ($m['verification_status'] ?? '-') . "</td>";
+            echo "<td>" . ($m['opening_time'] ?? '-') . " s/d " . ($m['closing_time'] ?? '-') . "</td>";
+            echo "<td>" . htmlspecialchars($m['operating_days'] ?? '-') . "</td>";
+            echo "<td>" . ($m['last_active_at'] ?? '-') . "</td>";
+            echo "</tr>";
+        }
+        echo "</table><br>";
+
         echo "<h2>Last 10 Completed Mai-Ride Orders</h2>";
         $orders = $db->table('orders')->where('status', 'completed')->orderBy('id', 'DESC')->limit(10)->get()->getResultArray();
 
@@ -151,22 +169,5 @@ class Home extends BaseController
             }
             echo "</table>";
         }
-        echo "<h2>Merchants Status (Live Server)</h2>";
-        $merchants = $db->table('merchants')->get()->getResultArray();
-        echo "<table border='1' cellpadding='5' style='border-collapse: collapse;'>";
-        echo "<tr><th>ID</th><th>Nama</th><th>Phone</th><th>is_open</th><th>Verification</th><th>Hours</th><th>Days</th><th>Last Active</th></tr>";
-        foreach ($merchants as $m) {
-            echo "<tr>";
-            echo "<td>{$m['id']}</td>";
-            echo "<td><b>" . htmlspecialchars($m['name']) . "</b></td>";
-            echo "<td>{$m['phone']}</td>";
-            echo "<td style='background:" . ($m['is_open'] == 1 ? '#dcfce7' : '#fee2e2') . "'><b>" . ($m['is_open'] == 1 ? 'BUKA (1)' : 'TUTUP (0)') . "</b></td>";
-            echo "<td>" . ($m['verification_status'] ?? '-') . "</td>";
-            echo "<td>" . ($m['opening_time'] ?? '-') . " s/d " . ($m['closing_time'] ?? '-') . "</td>";
-            echo "<td>" . htmlspecialchars($m['operating_days'] ?? '-') . "</td>";
-            echo "<td>" . ($m['last_active_at'] ?? '-') . "</td>";
-            echo "</tr>";
-        }
-        echo "</table>";
     }
 }
