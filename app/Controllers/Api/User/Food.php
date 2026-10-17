@@ -433,6 +433,13 @@ class Food extends ResourceController
             $kasirBadgeText = 'Toko Tutup';
             $kasirBadgeColor = 'red';
             $kasirMessage = 'Toko saat ini sedang tutup/nonaktif.';
+        } elseif ($isLiveHeartbeat) {
+            // Mitra aktif di aplikasi kasir sekarang, prioritas tertinggi
+            $isLiveKasir = true;
+            $kasirStatus = 'live';
+            $kasirBadgeText = 'Live Kasir';
+            $kasirBadgeColor = 'green';
+            $kasirMessage = 'Kasir sedang aktif di aplikasi dan siap langsung memproses pesanan.';
         } elseif (!$isStoreOpenToday) {
             $kasirStatus = 'holiday';
             $kasirBadgeText = 'Libur Hari Ini';
@@ -445,19 +452,13 @@ class Food extends ResourceController
             $openStr = $effectiveOpen ? substr($effectiveOpen, 0, 5) : '08:00';
             $closeStr = $effectiveClose ? substr($effectiveClose, 0, 5) : '21:00';
             $kasirMessage = "Di luar jam operasional (Buka $openStr - $closeStr).";
-        } elseif ($isLiveHeartbeat) {
-            $isLiveKasir = true;
-            $kasirStatus = 'live';
-            $kasirBadgeText = 'Live Kasir';
-            $kasirBadgeColor = 'green';
-            $kasirMessage = 'Kasir sedang aktif di aplikasi dan siap langsung memproses pesanan.';
         } else {
             // Toko buka & jam buka, tapi kasir belum membuka aplikasi baru-baru ini
             $kasirStatus = 'standby';
             $kasirBadgeText = 'Kasir Standby';
             $kasirBadgeColor = 'orange';
             $timeText = ($minutesAgo !== null && $minutesAgo < 60) ? " ($minutesAgo mnt lalu)" : "";
-            $kasirMessage = "Toko buka jam operasional, namun kasir belum aktif di aplikasi$timeText. Pesanan mungkin membutuhkan waktu respon lebih lama.";
+            $kasirMessage = "Toko buka, kasir standby di aplikasi$timeText. Siap menerima pesanan.";
         }
 
         $merchant['is_live_kasir'] = $isLiveKasir;
@@ -539,12 +540,13 @@ class Food extends ResourceController
             }
         }
 
-        if (!$isStoreOpenToday) {
+        // Jika toko secara manual DIBUKA oleh mitra (is_open = 1), saklar manual ini diizinkan menerima pesanan
+        if ((int)$merchant->is_open !== 1 && !$isStoreOpenToday) {
             return $this->respond(['status' => 400, 'message' => 'Mohon maaf, restoran libur hari ini sesuai jadwal operasional.'], 400);
         }
 
-        // Cek Jam Operasional Toko
-        if (!empty($effectiveOpen) && !empty($effectiveClose)) {
+        // Cek Jam Operasional Toko (Hanya memblokir jika toko tidak sedang dibuka secara manual oleh kasir)
+        if ((int)$merchant->is_open !== 1 && !empty($effectiveOpen) && !empty($effectiveClose)) {
             $isOpenNow = false;
             if ($effectiveOpen <= $effectiveClose) {
                 $isOpenNow = ($now >= $effectiveOpen && $now <= $effectiveClose);

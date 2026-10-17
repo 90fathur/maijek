@@ -153,6 +153,35 @@ class Merchants extends BaseController
         return redirect()->to('/admin/merchants');
     }
 
+    public function toggleOpen($id)
+    {
+        $merchantModel = new MerchantModel();
+        $merchant = $merchantModel->find($id);
+        if (!$merchant) {
+            session()->setFlashdata('error', 'Mitra UMKM tidak ditemukan.');
+            return redirect()->to('/admin/merchants');
+        }
+
+        $newStatus = ((int)($merchant['is_open'] ?? 0) === 1) ? 0 : 1;
+        $db = \Config\Database::connect();
+        $updateData = ['is_open' => $newStatus];
+
+        if ($db->fieldExists('last_active_at', 'merchants')) {
+            $updateData['last_active_at'] = ($newStatus == 1) ? date('Y-m-d H:i:s') : null;
+        }
+
+        if ($newStatus == 1 && $db->fieldExists('verification_status', 'merchants')) {
+            if (empty($merchant['verification_status']) || in_array($merchant['verification_status'], ['pending', 'unverified'])) {
+                $updateData['verification_status'] = 'approved';
+            }
+        }
+
+        $merchantModel->update($id, $updateData);
+
+        session()->setFlashdata('success', 'Status operasional "' . esc($merchant['name']) . '" berhasil diubah menjadi: ' . ($newStatus == 1 ? 'BUKA' : 'TUTUP'));
+        return redirect()->to('/admin/merchants');
+    }
+
     public function resetPassword($id)
     {
         $newPassword = $this->request->getPost('new_password');

@@ -91,6 +91,7 @@ class Dashboard extends BaseController
     public function toggleStatus()
     {
         $merchantId = session()->get('merchant_id');
+        $db = \Config\Database::connect();
         $merchantModel = new MerchantModel();
         $merchant = $merchantModel->find($merchantId);
 
@@ -98,8 +99,29 @@ class Dashboard extends BaseController
             return $this->response->setJSON(['status' => 404, 'message' => 'Toko tidak ditemukan']);
         }
 
-        $newStatus = $merchant['is_open'] == 1 ? 0 : 1;
-        $merchantModel->update($merchantId, ['is_open' => $newStatus]);
+        // Cek suspend
+        if (isset($merchant['verification_status']) && in_array($merchant['verification_status'], ['suspended', 'rejected'])) {
+            return $this->response->setJSON([
+                'status' => 403,
+                'message' => 'Akun toko Anda sedang disuspend/dinonaktifkan oleh Admin.',
+                'is_open' => 0
+            ]);
+        }
+
+        $newStatus = ((int)($merchant['is_open'] ?? 0) === 1) ? 0 : 1;
+        $updateData = ['is_open' => $newStatus];
+
+        if ($db->fieldExists('last_active_at', 'merchants')) {
+            $updateData['last_active_at'] = ($newStatus == 1) ? date('Y-m-d H:i:s') : null;
+        }
+
+        if ($newStatus == 1 && $db->fieldExists('verification_status', 'merchants')) {
+            if (empty($merchant['verification_status']) || in_array($merchant['verification_status'], ['pending', 'unverified'])) {
+                $updateData['verification_status'] = 'approved';
+            }
+        }
+
+        $merchantModel->update($merchantId, $updateData);
         session()->set('merchant_is_open', $newStatus);
 
         if ($this->request->isAJAX()) {

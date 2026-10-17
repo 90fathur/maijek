@@ -928,6 +928,7 @@ $routes->group('admin', ['namespace' => 'App\Controllers\Admin', 'filter' => 'ad
     $routes->post('merchants/deleteAllMenus/(:num)', 'Merchants::deleteAllMenus/$1');
     $routes->post('merchants/updatePhoto/(:num)', 'Merchants::updatePhoto/$1');
     $routes->post('merchants/changeStatus/(:num)', 'Merchants::changeStatus/$1');
+    $routes->post('merchants/toggleOpen/(:num)', 'Merchants::toggleOpen/$1');
     $routes->post('merchants/resetPassword/(:num)', 'Merchants::resetPassword/$1');
 
     // Merchant Verifications (UMKM)

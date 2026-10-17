@@ -122,11 +122,18 @@
                             <td><?= esc($merchant['phone']) ?></td>
                             <td style="max-width: 250px; font-size: 0.8125rem;"><?= esc($merchant['address']) ?></td>
                             <td>
-                                <?php if ($merchant['is_open'] == 1): ?>
-                                    <span class="badge badge-success" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 0.75rem;">Buka</span>
-                                <?php else: ?>
-                                    <span class="badge badge-danger" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 0.75rem;">Tutup</span>
-                                <?php endif; ?>
+                                <form action="<?= base_url('admin/merchants/toggleOpen/' . $merchant['id']) ?>" method="post" style="margin: 0; display: inline-block;" onsubmit="return confirm('Ubah status operasional toko <?= esc($merchant['name'], 'js') ?> menjadi <?= $merchant['is_open'] == 1 ? 'TUTUP' : 'BUKA' ?>?');">
+                                    <?= csrf_field() ?>
+                                    <?php if ($merchant['is_open'] == 1): ?>
+                                        <button type="submit" style="padding: 4px 10px; background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; font-weight: 700; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.25)'" onmouseout="this.style.background='rgba(16, 185, 129, 0.15)'" title="Toko sedang Buka. Klik untuk Menutup.">
+                                            <i class="fa-solid fa-store" style="font-size: 0.7rem;"></i> Buka
+                                        </button>
+                                    <?php else: ?>
+                                        <button type="submit" style="padding: 4px 10px; background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; font-weight: 700; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'" title="Toko sedang Tutup. Klik untuk Membuka.">
+                                            <i class="fa-solid fa-door-closed" style="font-size: 0.7rem;"></i> Tutup
+                                        </button>
+                                    <?php endif; ?>
+                                </form>
                             </td>
                             <td>
                                 <?php if ($merchant['verification_status'] === 'approved'): ?>

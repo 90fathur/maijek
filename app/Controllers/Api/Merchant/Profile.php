@@ -30,21 +30,75 @@ class Profile extends ResourceController
     public function toggleStatus()
     {
         $payload = $_SERVER['jwt_payload'];
+        $db = \Config\Database::connect();
         $merchantModel = new MerchantModel();
 
         $merchant = $merchantModel->find($payload['uid']);
-        if (!$merchant) return $this->respond(['status' => 404, 'message' => 'Not found'], 404);
+        if (!$merchant) {
+            return $this->respond(['status' => 404, 'message' => 'Toko tidak ditemukan'], 404);
+        }
 
-        $newStatus = $merchant['is_open'] == 1 ? 0 : 1;
-        $merchantModel->update($payload['uid'], [
-            'is_open' => $newStatus,
-            'last_active_at' => $newStatus == 1 ? date('Y-m-d H:i:s') : null,
-        ]);
+        // Cek apakah akun toko disuspend atau ditolak oleh Admin
+        if (isset($merchant['verification_status']) && in_array($merchant['verification_status'], ['suspended', 'rejected'])) {
+            return $this->respond([
+                'status' => 403,
+                'message' => 'Akun toko Anda sedang dinonaktifkan/disuspend oleh Admin. Silakan hubungi Customer Service.',
+                'data' => ['is_open' => 0]
+            ], 403);
+        }
+
+        // Ambil target status eksplisit jika dikirim oleh aplikasi
+        $explicitIsOpen = $this->request->getVar('is_open');
+        if ($explicitIsOpen === null) {
+            $json = $this->request->getJSON(true);
+            if (isset($json['is_open'])) {
+                $explicitIsOpen = $json['is_open'];
+            } elseif (isset($json['status'])) {
+                $explicitIsOpen = ($json['status'] === 'open' || $json['status'] == 1 || $json['status'] === true) ? 1 : 0;
+            }
+        }
+
+        if ($explicitIsOpen !== null) {
+            $newStatus = ($explicitIsOpen == 1 || $explicitIsOpen === true || $explicitIsOpen === '1') ? 1 : 0;
+        } else {
+            $currentStatus = (int)($merchant['is_open'] ?? 0);
+            $newStatus = ($currentStatus === 1) ? 0 : 1;
+        }
+
+        // Pastikan kolom last_active_at dan verification_status aman di database
+        if (!$db->fieldExists('last_active_at', 'merchants')) {
+            try {
+                $db->query("ALTER TABLE merchants ADD COLUMN last_active_at DATETIME NULL DEFAULT NULL AFTER is_open;");
+            } catch (\Throwable $e) {}
+        }
+        if (!$db->fieldExists('verification_status', 'merchants')) {
+            try {
+                $db->query("ALTER TABLE merchants ADD COLUMN verification_status ENUM('pending', 'approved', 'rejected', 'suspended') DEFAULT 'approved' AFTER balance;");
+            } catch (\Throwable $e) {}
+        }
+
+        $updateData = ['is_open' => $newStatus];
+
+        if ($db->fieldExists('last_active_at', 'merchants')) {
+            $updateData['last_active_at'] = ($newStatus == 1) ? date('Y-m-d H:i:s') : null;
+        }
+
+        // Jika toko dibuka dan status verifikasi masih pending/unverified/kosong, auto-approve agar langsung aktif di MaiFood/MaiMart
+        if ($newStatus == 1 && $db->fieldExists('verification_status', 'merchants')) {
+            if (empty($merchant['verification_status']) || in_array($merchant['verification_status'], ['pending', 'unverified'])) {
+                $updateData['verification_status'] = 'approved';
+            }
+        }
+
+        $merchantModel->update($payload['uid'], $updateData);
 
         return $this->respond([
             'status' => 200,
-            'message' => 'Status berhasil diubah',
-            'data' => ['is_open' => $newStatus]
+            'message' => $newStatus == 1 ? 'Toko berhasil DIBUKA & siap menerima pesanan.' : 'Toko berhasil DITUTUP sementara.',
+            'data' => [
+                'is_open' => $newStatus,
+                'status_label' => $newStatus == 1 ? 'BUKA' : 'TUTUP'
+            ]
         ]);
     }
 
@@ -69,37 +123,76 @@ class Profile extends ResourceController
     public function updateProfile()
     {
         $payload = $_SERVER['jwt_payload'];
-
+        $db = \Config\Database::connect();
         $merchantModel = new MerchantModel();
 
         $data = [];
+        $json = $this->request->getJSON(true) ?? [];
+
         if ($this->request->getVar('opening_time')) {
             $data['opening_time'] = $this->request->getVar('opening_time');
+        } elseif (isset($json['opening_time'])) {
+            $data['opening_time'] = $json['opening_time'];
         }
+
         if ($this->request->getVar('closing_time')) {
             $data['closing_time'] = $this->request->getVar('closing_time');
+        } elseif (isset($json['closing_time'])) {
+            $data['closing_time'] = $json['closing_time'];
         }
+
         if ($this->request->getVar('operating_days') !== null) {
             $days = $this->request->getVar('operating_days');
             $data['operating_days'] = is_array($days) ? implode(',', $days) : (string)$days;
+        } elseif (isset($json['operating_days'])) {
+            $days = $json['operating_days'];
+            $data['operating_days'] = is_array($days) ? json_encode($days) : (string)$days;
         }
+
         if ($this->request->getVar('name')) {
             $data['name'] = $this->request->getVar('name');
+        } elseif (isset($json['name'])) {
+            $data['name'] = $json['name'];
         }
+
         if ($this->request->getVar('latitude') !== null) {
             $data['latitude'] = $this->request->getVar('latitude');
+        } elseif (isset($json['latitude'])) {
+            $data['latitude'] = $json['latitude'];
         }
+
         if ($this->request->getVar('longitude') !== null) {
             $data['longitude'] = $this->request->getVar('longitude');
+        } elseif (isset($json['longitude'])) {
+            $data['longitude'] = $json['longitude'];
         }
+
         if ($this->request->getVar('address') !== null) {
             $data['address'] = $this->request->getVar('address');
+        } elseif (isset($json['address'])) {
+            $data['address'] = $json['address'];
         }
+
         if ($this->request->getVar('merchant_type') !== null) {
             $data['merchant_type'] = $this->request->getVar('merchant_type');
+        } elseif (isset($json['merchant_type'])) {
+            $data['merchant_type'] = $json['merchant_type'];
         }
+
         if ($this->request->getVar('category') !== null) {
             $data['category'] = $this->request->getVar('category');
+        } elseif (isset($json['category'])) {
+            $data['category'] = $json['category'];
+        }
+
+        // Dukungan status is_open pada updateProfile
+        $reqIsOpen = $this->request->getVar('is_open') ?? ($json['is_open'] ?? null);
+        if ($reqIsOpen !== null) {
+            $isOpenVal = ($reqIsOpen == 1 || $reqIsOpen === true || $reqIsOpen === '1') ? 1 : 0;
+            $data['is_open'] = $isOpenVal;
+            if ($db->fieldExists('last_active_at', 'merchants')) {
+                $data['last_active_at'] = ($isOpenVal == 1) ? date('Y-m-d H:i:s') : null;
+            }
         }
 
         if (empty($data)) {
