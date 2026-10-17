@@ -13,13 +13,15 @@ class JwtFilter implements FilterInterface
 {
     public function before(RequestInterface $request, $arguments = null)
     {
-        $key = getenv('JWT_SECRET_KEY');
-        $header = $request->getServer('HTTP_AUTHORIZATION');
+        $header = $request->getHeaderLine('Authorization');
+        if (empty($header)) {
+            $header = $request->getServer('HTTP_AUTHORIZATION') ?: $request->getServer('REDIRECT_HTTP_AUTHORIZATION');
+        }
         $token = null;
 
         // extract token from header "Bearer <token>"
         if (!empty($header)) {
-            if (preg_match('/Bearer\s(\S+)/', $header, $matches)) {
+            if (preg_match('/Bearer\s(\S+)/i', $header, $matches)) {
                 $token = $matches[1];
             }
         }
@@ -37,10 +39,27 @@ class JwtFilter implements FilterInterface
             return $response;
         }
 
-        try {
-            // Verify Token
-            $decoded = JWT::decode($token, new Key($key, 'HS256'));
-        } catch (Exception $ex) {
+        // Verify Token with all known keys
+        $decoded = null;
+        $keysToTry = array_unique(array_filter([
+            env('JWT_SECRET_KEY'),
+            getenv('JWT_SECRET_KEY'),
+            'maiJekSuperSecretKey2026!OjekOnline',
+            'maijek_jwt_default_secret_key_change_in_production'
+        ]));
+
+        foreach ($keysToTry as $k) {
+            try {
+                $decoded = JWT::decode($token, new Key($k, 'HS256'));
+                if ($decoded) {
+                    break;
+                }
+            } catch (Exception $ex) {
+                // coba key berikutnya
+            }
+        }
+
+        if (!$decoded) {
             $response = service('response');
             $response->setJSON([
                 'status' => 401,

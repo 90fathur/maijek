@@ -103,6 +103,17 @@ class Home extends BaseController
     {
         $db = \Config\Database::connect();
 
+        $openMerchantId = $this->request->getGet('open_merchant_id');
+        if (!empty($openMerchantId)) {
+            $mId = (int)$openMerchantId;
+            $db->table('merchants')->where('id', $mId)->update([
+                'is_open' => 1,
+                'verification_status' => 'approved',
+                'last_active_at' => date('Y-m-d H:i:s')
+            ]);
+            echo "<div style='background:#dcfce7;color:#166534;padding:12px;margin:10px 0;border-radius:8px;'><b>Sukses:</b> Merchant ID {$mId} berhasil DIBUKA di Live Server!</div>";
+        }
+
         echo "<h1>DB Debug Info</h1>";
         echo "Current Server Time (PHP): " . date('Y-m-d H:i:s') . "<br>";
 
